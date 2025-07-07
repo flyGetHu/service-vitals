@@ -1,0 +1,54 @@
+[package]
+name = "service-vitals"
+version = "0.1.0"
+edition = "2021"
+authors = ["flyGetHu <970780868@qq.com>"]
+description = "A cross-platform service health monitoring tool with notification support"
+license = "MIT"
+repository = "https://github.com/flyGetHu/service-vitals"
+keywords = ["monitoring", "health-check", "service", "notification", "cli"]
+categories = ["command-line-utilities", "web-programming::http-client"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.11", features = [
+  "json",
+  "rustls-tls",
+], default-features = false }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# CLI framework
+clap = { version = "4.0", features = ["derive", "env"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+log = "0.4"
+env_logger = "0.10"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# File watching for hot reload
+notify = "6.0"
+
+# Template engine for notifications
+handlebars = "4.0"
+
+# Cross-platform directories
+dirs = "5.0"
+
+# Async trait support
+async-trait = "0.1"
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4", "serde"] }

@@ -1,0 +1,13 @@
+[global]
+check_interval_seconds = 5
+log_level = "debug"
+request_timeout_seconds = 5
+max_concurrent_checks = 10
+
+[[services]]
+name = "测试服务"
+url = "http://localhost:8080/health"
+method = "GET"
+expected_status_codes = [200]
+failure_threshold = 1
+enabled = true

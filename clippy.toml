@@ -1,0 +1,25 @@
+# Clippy静态分析配置
+
+# 认知复杂度阈值
+cognitive-complexity-threshold = 30
+
+# 类型复杂度阈值
+type-complexity-threshold = 250
+
+# 单个表达式的最大行数
+single-char-binding-names-threshold = 4
+
+# 过多参数的阈值
+too-many-arguments-threshold = 7
+
+# 过多行数的阈值
+too-many-lines-threshold = 100
+
+# 琐碎复制的最大大小
+trivial-copy-size-limit = 128
+
+# 避免破坏性更改
+avoid-breaking-exported-api = true
+
+# 允许的脚本
+allowed-scripts = ["Latin"]

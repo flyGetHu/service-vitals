@@ -1,0 +1,7 @@
+[global]
+# 最小配置只需要指定必要的全局设置
+
+[[services]]
+name = "示例服务"
+url = "https://httpbin.org/status/200"
+expected_status_codes = [200]
