@@ -23,6 +23,10 @@ pub enum ServiceVitalsError {
     #[error("IO错误: {0}")]
     Io(#[from] std::io::Error),
 
+    /// JSON序列化/反序列化错误
+    #[error("JSON错误: {0}")]
+    Json(#[from] serde_json::Error),
+
     /// 其他错误
     #[error("其他错误: {0}")]
     Other(#[from] anyhow::Error),
