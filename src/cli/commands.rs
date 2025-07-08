@@ -2,10 +2,12 @@
 //!
 //! 实现各种CLI命令的处理逻辑
 
-use crate::cli::args::{Args, Commands, ConfigTemplate, OutputFormat};
+use crate::cli::args::{Args, Commands, ConfigTemplate, OutputFormat, NotificationType};
 use crate::config::{ConfigLoader, TomlConfigLoader};
 use crate::error::Result;
 use crate::health::{HealthChecker, HttpHealthChecker};
+use crate::notification::{FeishuSender, NotificationSender};
+use crate::notification::sender::{NotificationMessage, MessageType};
 use async_trait::async_trait;
 use std::path::Path;
 use std::time::Duration;
@@ -436,6 +438,103 @@ impl Command for StatusCommand {
         println!("查看服务状态...");
         // TODO: 实现状态查看逻辑
         println!("服务状态: 运行中（占位符实现）");
+        Ok(())
+    }
+}
+
+/// 测试通知命令
+pub struct TestNotificationCommand;
+
+#[async_trait]
+impl Command for TestNotificationCommand {
+    async fn execute(&self, args: &Args) -> Result<()> {
+        if let Commands::TestNotification {
+            notification_type,
+            message,
+        } = &args.command
+        {
+            self.test_notification(args, notification_type, message).await
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl TestNotificationCommand {
+    /// 测试通知功能
+    async fn test_notification(
+        &self,
+        args: &Args,
+        notification_type: &NotificationType,
+        message: &str,
+    ) -> Result<()> {
+        println!("测试通知功能...");
+
+        match notification_type {
+            NotificationType::Feishu => {
+                self.test_feishu_notification(args, message).await
+            }
+            NotificationType::Email => {
+                println!("邮件通知功能尚未实现");
+                Ok(())
+            }
+            NotificationType::Webhook => {
+                println!("Webhook通知功能尚未实现");
+                Ok(())
+            }
+        }
+    }
+
+    /// 测试飞书通知
+    async fn test_feishu_notification(&self, args: &Args, message: &str) -> Result<()> {
+        // 加载配置
+        let loader = TomlConfigLoader::new(true);
+        let config = loader.load_from_file(&args.get_config_path()).await?;
+
+        // 检查是否配置了飞书webhook
+        let webhook_url = match config.global.default_feishu_webhook_url {
+            Some(url) => url,
+            None => {
+                println!("❌ 未配置飞书webhook URL");
+                println!("请在配置文件中设置 global.default_feishu_webhook_url");
+                return Ok(());
+            }
+        };
+
+        println!("🔗 使用webhook URL: {}", webhook_url);
+
+        // 创建飞书发送器
+        let sender = FeishuSender::new(Some(webhook_url))?;
+
+        // 创建测试消息
+        let test_message = NotificationMessage {
+            title: "🧪 Service Vitals 通知测试".to_string(),
+            content: format!(
+                "**测试时间**: {}\n**测试消息**: {}\n\n这是一条来自 Service Vitals 的测试通知，用于验证通知功能是否正常工作。",
+                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+                message
+            ),
+            service_name: "test-service".to_string(),
+            service_url: "https://example.com".to_string(),
+            message_type: MessageType::Info,
+        };
+
+        // 发送测试消息
+        println!("📤 发送测试消息...");
+        match sender.send_message(&test_message).await {
+            Ok(()) => {
+                println!("✅ 测试消息发送成功！");
+                println!("请检查您的飞书群组是否收到测试消息。");
+            }
+            Err(e) => {
+                println!("❌ 测试消息发送失败: {}", e);
+                println!("请检查：");
+                println!("  1. webhook URL是否正确");
+                println!("  2. 网络连接是否正常");
+                println!("  3. 飞书机器人是否已添加到群组");
+            }
+        }
+
         Ok(())
     }
 }

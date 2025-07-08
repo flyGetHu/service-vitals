@@ -3,7 +3,7 @@
 //! 提供健康检测任务的调度、管理和并发控制功能
 
 use crate::config::types::{GlobalConfig, ServiceConfig};
-use crate::health::HealthChecker;
+use crate::health::{HealthChecker, HealthStatus};
 use crate::notification::NotificationSender;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -14,6 +14,33 @@ use tokio::sync::{RwLock, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, Instant};
 use tracing::{debug, error, info, warn};
+
+/// 服务通知状态
+#[derive(Debug, Clone)]
+pub struct ServiceNotificationState {
+    /// 上次健康状态
+    pub last_health_status: Option<HealthStatus>,
+    /// 上次通知时间
+    pub last_notification_time: Option<Instant>,
+    /// 连续失败次数
+    pub consecutive_failures: u32,
+    /// 通知发送次数统计
+    pub notification_count: u32,
+    /// 是否已发送告警
+    pub alert_sent: bool,
+}
+
+impl Default for ServiceNotificationState {
+    fn default() -> Self {
+        Self {
+            last_health_status: None,
+            last_notification_time: None,
+            consecutive_failures: 0,
+            notification_count: 0,
+            alert_sent: false,
+        }
+    }
+}
 
 /// 调度器状态
 #[derive(Debug, Clone)]
@@ -26,6 +53,21 @@ pub struct SchedulerStatus {
     pub is_running: bool,
     /// 最后更新时间
     pub last_update: Instant,
+    /// 通知统计
+    pub notification_stats: NotificationStats,
+}
+
+/// 通知统计信息
+#[derive(Debug, Clone, Default)]
+pub struct NotificationStats {
+    /// 总通知发送次数
+    pub total_sent: u32,
+    /// 通知发送成功次数
+    pub successful_sent: u32,
+    /// 通知发送失败次数
+    pub failed_sent: u32,
+    /// 最后通知时间
+    pub last_notification_time: Option<Instant>,
 }
 
 /// 任务调度器trait，定义调度接口
@@ -76,6 +118,8 @@ pub struct TaskScheduler {
     semaphore: Arc<Semaphore>,
     /// 调度器状态
     status: Arc<RwLock<SchedulerStatus>>,
+    /// 服务通知状态
+    notification_states: Arc<RwLock<HashMap<String, ServiceNotificationState>>>,
 }
 
 impl TaskScheduler {
@@ -99,6 +143,7 @@ impl TaskScheduler {
             total_services: 0,
             is_running: false,
             last_update: Instant::now(),
+            notification_stats: NotificationStats::default(),
         };
 
         Self {
@@ -108,7 +153,87 @@ impl TaskScheduler {
             config: Arc::new(RwLock::new(config)),
             semaphore: Arc::new(Semaphore::new(max_concurrent)),
             status: Arc::new(RwLock::new(status)),
+            notification_states: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// 静态方法处理通知逻辑
+    async fn handle_notification_static(
+        service: &ServiceConfig,
+        result: &crate::health::HealthResult,
+        notification_state: &mut ServiceNotificationState,
+        notifier: &Option<Arc<dyn NotificationSender>>,
+        status_arc: &Arc<RwLock<SchedulerStatus>>,
+    ) -> Result<()> {
+        let current_status = result.status.clone();
+        let now = Instant::now();
+
+        // 更新连续失败计数
+        if current_status.is_healthy() {
+            if notification_state.consecutive_failures > 0 {
+                // 服务恢复，发送恢复通知
+                if notification_state.alert_sent {
+                    if let Some(ref notifier) = notifier {
+                        match notifier.send_health_alert(service, result).await {
+                            Ok(()) => {
+                                info!("发送服务恢复通知成功: {}", service.name);
+                                Self::update_notification_stats_static(status_arc, true).await;
+                            }
+                            Err(e) => {
+                                error!("发送服务恢复通知失败: {} - {}", service.name, e);
+                                Self::update_notification_stats_static(status_arc, false).await;
+                            }
+                        }
+                    }
+                    notification_state.alert_sent = false;
+                }
+            }
+            notification_state.consecutive_failures = 0;
+        } else {
+            notification_state.consecutive_failures += 1;
+
+            // 检查是否需要发送告警
+            let should_send_alert = notification_state.consecutive_failures >= service.failure_threshold
+                && !notification_state.alert_sent;
+
+            if should_send_alert {
+                if let Some(ref notifier) = notifier {
+                    match notifier.send_health_alert(service, result).await {
+                        Ok(()) => {
+                            info!("发送服务告警通知成功: {}", service.name);
+                            notification_state.alert_sent = true;
+                            notification_state.notification_count += 1;
+                            notification_state.last_notification_time = Some(now);
+                            Self::update_notification_stats_static(status_arc, true).await;
+                        }
+                        Err(e) => {
+                            error!("发送服务告警通知失败: {} - {}", service.name, e);
+                            Self::update_notification_stats_static(status_arc, false).await;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 更新状态
+        notification_state.last_health_status = Some(current_status);
+
+        Ok(())
+    }
+
+    /// 静态方法更新通知统计
+    async fn update_notification_stats_static(
+        status_arc: &Arc<RwLock<SchedulerStatus>>,
+        success: bool,
+    ) {
+        let mut status = status_arc.write().await;
+        status.notification_stats.total_sent += 1;
+        if success {
+            status.notification_stats.successful_sent += 1;
+        } else {
+            status.notification_stats.failed_sent += 1;
+        }
+        status.notification_stats.last_notification_time = Some(Instant::now());
     }
 
     /// 启动单个服务的检测任务
@@ -116,9 +241,9 @@ impl TaskScheduler {
         let service_name = service.name.clone();
         let service_name_for_task = service_name.clone();
         let checker = Arc::clone(&self.checker);
-        let notifier = self.notifier.clone();
         let config = Arc::clone(&self.config);
         let semaphore = Arc::clone(&self.semaphore);
+        let notification_states = Arc::clone(&self.notification_states);
 
         // 计算检测间隔
         let check_interval = service.check_interval_seconds.unwrap_or_else(|| {
@@ -126,10 +251,17 @@ impl TaskScheduler {
             config.check_interval_seconds
         });
 
+        // 初始化通知状态
+        {
+            let mut states = notification_states.write().await;
+            states.insert(service_name.clone(), ServiceNotificationState::default());
+        }
+
         // 创建检测任务
+        let notifier = self.notifier.clone();
+        let status_arc = Arc::clone(&self.status);
         let task = tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(check_interval));
-            let mut consecutive_failures = 0u32;
 
             info!("启动服务检测任务: {}", service_name_for_task);
 
@@ -156,32 +288,27 @@ impl TaskScheduler {
                     }
                 };
 
-                // 处理检测结果
-                if result.status.is_healthy() {
-                    if consecutive_failures > 0 {
-                        info!(
-                            "服务恢复正常: {} (之前连续失败{}次)",
-                            service_name_for_task, consecutive_failures
-                        );
-                        consecutive_failures = 0;
-                    } else {
-                        debug!("服务检测正常: {}", service_name_for_task);
-                    }
-                } else {
-                    consecutive_failures += 1;
-                    warn!(
-                        "服务检测失败: {} (连续失败{}次)",
-                        service_name_for_task, consecutive_failures
-                    );
-
-                    // 检查是否达到告警阈值
-                    if consecutive_failures >= service.failure_threshold {
-                        if let Some(ref notifier) = notifier {
-                            if let Err(e) = notifier.send_health_alert(&service, &result).await {
-                                error!("发送告警通知失败: {}", e);
-                            }
+                // 处理通知逻辑
+                {
+                    let mut states = notification_states.write().await;
+                    if let Some(notification_state) = states.get_mut(&service_name_for_task) {
+                        if let Err(e) = Self::handle_notification_static(
+                            &service,
+                            &result,
+                            notification_state,
+                            &notifier,
+                            &status_arc,
+                        ).await {
+                            error!("处理通知失败: {}", e);
                         }
                     }
+                }
+
+                // 记录检测结果
+                if result.status.is_healthy() {
+                    debug!("服务检测正常: {}", service_name_for_task);
+                } else {
+                    warn!("服务检测失败: {}", service_name_for_task);
                 }
             }
         });
