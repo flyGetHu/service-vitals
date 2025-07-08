@@ -5,7 +5,10 @@
 use crate::config::types::ServiceConfig;
 use crate::health::HealthResult;
 use crate::notification::sender::{MessageType, NotificationMessage, NotificationSender};
-use crate::notification::template::{TemplateContext, MessageTemplate, create_default_alert_template, create_default_recovery_template};
+use crate::notification::template::{
+    create_default_alert_template, create_default_recovery_template, MessageTemplate,
+    TemplateContext,
+};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -52,7 +55,7 @@ impl Default for FeishuConfig {
         Self {
             webhook_url: None,
             secret: None,
-            mention_all: false,
+            mention_all: true,
             mention_users: Vec::new(),
             max_retries: 3,
             retry_delay: 5,
@@ -102,10 +105,9 @@ impl FeishuSender {
             .context("创建HTTP客户端失败")?;
 
         // 创建默认模板
-        let alert_template = create_default_alert_template()
-            .context("创建默认告警模板失败")?;
-        let recovery_template = create_default_recovery_template()
-            .context("创建默认恢复模板失败")?;
+        let alert_template = create_default_alert_template().context("创建默认告警模板失败")?;
+        let recovery_template =
+            create_default_recovery_template().context("创建默认恢复模板失败")?;
 
         Ok(Self {
             client,
@@ -186,15 +188,13 @@ impl FeishuSender {
             MessageType::Info => "blue",
         };
 
-        let mut elements = vec![
-            json!({
-                "tag": "div",
-                "text": {
-                    "content": message.content,
-                    "tag": "lark_md"
-                }
-            })
-        ];
+        let mut elements = vec![json!({
+            "tag": "div",
+            "text": {
+                "content": message.content,
+                "tag": "lark_md"
+            }
+        })];
 
         // 添加@功能到卡片
         if self.config.mention_all || !self.config.mention_users.is_empty() {
@@ -235,7 +235,11 @@ impl FeishuSender {
     }
 
     /// 构建消息体
-    fn build_message_body(&self, message: &NotificationMessage, format: &FeishuMessageFormat) -> Value {
+    fn build_message_body(
+        &self,
+        message: &NotificationMessage,
+        format: &FeishuMessageFormat,
+    ) -> Value {
         match format {
             FeishuMessageFormat::Text => {
                 let content = format!("{}\n{}", message.title, message.content);
@@ -309,10 +313,7 @@ impl FeishuSender {
             request = self.client.post(webhook_url).json(&signed_body);
         }
 
-        let response = request
-            .send()
-            .await
-            .context("发送飞书消息失败")?;
+        let response = request.send().await.context("发送飞书消息失败")?;
 
         if response.status().is_success() {
             // 检查飞书API响应
@@ -350,7 +351,7 @@ impl FeishuSender {
         mac.update(string_to_sign.as_bytes());
         let result = mac.finalize();
 
-        use base64::{Engine as _, engine::general_purpose};
+        use base64::{engine::general_purpose, Engine as _};
         Ok(general_purpose::STANDARD.encode(result.into_bytes()))
     }
 
@@ -363,42 +364,44 @@ impl FeishuSender {
     }
 
     /// 创建模板上下文
-    fn create_template_context(&self, service: &ServiceConfig, result: &HealthResult) -> TemplateContext {
+    fn create_template_context(
+        &self,
+        service: &ServiceConfig,
+        result: &HealthResult,
+    ) -> TemplateContext {
         let mut custom_fields = HashMap::new();
 
         // 添加健康状态
         let is_healthy = result.status.is_healthy();
         custom_fields.insert(
             "health_status".to_string(),
-            serde_json::Value::Bool(is_healthy)
+            serde_json::Value::Bool(is_healthy),
         );
 
         // 添加健康状态文本
         custom_fields.insert(
             "health_status_text".to_string(),
-            serde_json::Value::String(
-                if is_healthy { "正常" } else { "异常" }.to_string()
-            )
+            serde_json::Value::String(if is_healthy { "正常" } else { "异常" }.to_string()),
         );
 
         // 添加服务描述
         if let Some(ref description) = service.description {
             custom_fields.insert(
                 "service_description".to_string(),
-                serde_json::Value::String(description.clone())
+                serde_json::Value::String(description.clone()),
             );
         }
 
         // 添加HTTP方法
         custom_fields.insert(
             "http_method".to_string(),
-            serde_json::Value::String(service.method.clone())
+            serde_json::Value::String(service.method.clone()),
         );
 
         // 添加失败阈值
         custom_fields.insert(
             "failure_threshold".to_string(),
-            serde_json::Value::Number(service.failure_threshold.into())
+            serde_json::Value::Number(service.failure_threshold.into()),
         );
 
         TemplateContext {
@@ -433,14 +436,17 @@ impl NotificationSender for FeishuSender {
 
         // 选择合适的模板和消息类型
         let (template, message_type, title_prefix) = if result.status.is_healthy() {
-            (&self.recovery_template, MessageType::Recovery, "✅ 服务恢复")
+            (
+                &self.recovery_template,
+                MessageType::Recovery,
+                "✅ 服务恢复",
+            )
         } else {
             (&self.alert_template, MessageType::Alert, "🚨 服务告警")
         };
 
         // 渲染模板
-        let content = template.render(&context)
-            .context("渲染消息模板失败")?;
+        let content = template.render(&context).context("渲染消息模板失败")?;
 
         let message = NotificationMessage {
             title: format!("{} - {}", title_prefix, service.name),

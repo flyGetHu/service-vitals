@@ -7,20 +7,19 @@
 //! - 多平台守护进程支持
 //! - 结构化日志记录
 
-pub mod config;
-pub mod health;
 pub mod cli;
-pub mod notification;
-pub mod error;
-pub mod logging;
-pub mod status;
+pub mod config;
 pub mod daemon;
-pub mod web;
+pub mod error;
+pub mod health;
+pub mod logging;
+pub mod notification;
+pub mod status;
 
 // 重新导出主要类型
 pub use config::{Config, GlobalConfig, ServiceConfig};
-pub use health::{HealthChecker, HealthResult, HealthStatus};
 pub use error::ServiceVitalsError;
+pub use health::{HealthChecker, HealthResult, HealthStatus};
 
 /// 应用程序版本信息
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

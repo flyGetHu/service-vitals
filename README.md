@@ -4,7 +4,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/flyGetHu/service-vitals)
 
-一个跨平台的服务健康监控工具，支持HTTP/HTTPS服务检测、实时告警通知、Web监控界面和Prometheus指标导出。
+一个跨平台的服务健康监控工具，支持HTTP/HTTPS服务检测和实时告警通知。
 
 ## 🚀 项目概述
 
@@ -13,8 +13,6 @@ Service Vitals 是一个使用Rust开发的现代化服务健康监控解决方�
 - **实时健康检测** - 支持HTTP/HTTPS服务的定期健康检查
 - **智能告警系统** - 集成飞书webhook，支持自定义消息模板
 - **配置热重载** - 无需重启即可更新监控配置
-- **Web监控界面** - 直观的仪表板和实时状态展示
-- **Prometheus集成** - 完整的指标导出和监控数据
 - **跨平台支持** - 原生支持Linux和macOS
 - **守护进程模式** - 支持系统服务安装和后台运行
 
@@ -173,15 +171,7 @@ retry_delay_seconds = 5
 "User-Agent" = "ServiceVitals/1.0"
 "Accept" = "application/json"
 
-# Web界面配置（可选）
-[web]
-enabled = true
-bind_address = "0.0.0.0"
-port = 8080
-api_key = "your-secure-api-key"
-disable_auth = false
-cors_enabled = true
-cors_origins = ["*"]
+
 
 # 服务配置列表
 [[services]]
@@ -373,162 +363,9 @@ export SERVICE_VITALS_MAX_CONCURRENT="100"
 export SERVICE_VITALS_WORKDIR="/var/lib/service-vitals"
 ```
 
-## 🌐 Web界面
 
-Service Vitals提供了现代化的Web监控界面，支持实时状态展示和API访问。
 
-### 访问Web界面
 
-启动服务后，可以通过以下地址访问：
-
-- **仪表板**: `http://localhost:8080/dashboard`
-- **API文档**: `http://localhost:8080/api/v1/status`
-- **健康检查**: `http://localhost:8080/api/v1/health`
-- **Prometheus指标**: `http://localhost:8080/metrics`
-
-### Web界面功能
-
-#### 仪表板功能
-- 📊 **实时状态概览** - 显示所有服务的健康状态统计
-- 🔍 **服务详情** - 查看每个服务的详细监控信息
-- ⏱️ **响应时间图表** - 可视化服务响应时间趋势
-- 🔔 **告警历史** - 查看历史告警记录和处理状态
-- 🔄 **自动刷新** - 可配置的自动数据刷新间隔
-
-#### API端点
-
-| 端点                       | 方法 | 说明                 | 认证 |
-| -------------------------- | ---- | -------------------- | ---- |
-| `/api/v1/status`           | GET  | 获取所有服务状态     | 可选 |
-| `/api/v1/status/{service}` | GET  | 获取特定服务状态     | 可选 |
-| `/api/v1/config`           | GET  | 获取配置信息（脱敏） | 可选 |
-| `/api/v1/health`           | GET  | 系统健康检查         | 无   |
-| `/metrics`                 | GET  | Prometheus指标       | 无   |
-
-### API认证
-
-Web界面支持可选的API密钥认证：
-
-```bash
-# 使用API密钥访问
-curl -H "X-API-Key: your-secure-api-key" http://localhost:8080/api/v1/status
-```
-
-### CORS配置
-
-支持跨域资源共享配置，适用于前端集成：
-
-```toml
-[web]
-cors_enabled = true
-cors_origins = ["https://your-frontend.com", "http://localhost:3000"]
-```
-
-## 📈 Prometheus集成
-
-Service Vitals提供完整的Prometheus指标导出功能，支持与Grafana等监控系统集成。
-
-### 指标端点
-
-访问 `http://localhost:8080/metrics` 获取Prometheus格式的指标数据。
-
-### 可用指标
-
-#### 核心监控指标
-
-| 指标名称                               | 类型      | 标签                | 说明                       |
-| -------------------------------------- | --------- | ------------------- | -------------------------- |
-| `service_vitals_health_check_total`    | Counter   | `service`, `status` | 健康检查总次数             |
-| `service_vitals_response_time_seconds` | Histogram | `service`           | 响应时间分布（秒）         |
-| `service_vitals_up`                    | Gauge     | `service`, `url`    | 服务状态（1=正常，0=异常） |
-| `service_vitals_last_check_timestamp`  | Gauge     | `service`           | 最后检查时间戳             |
-| `service_vitals_consecutive_failures`  | Gauge     | `service`           | 连续失败次数               |
-| `service_vitals_start_time`            | Gauge     | -                   | 服务启动时间戳             |
-
-#### 系统指标
-
-| 指标名称                                  | 类型    | 说明         |
-| ----------------------------------------- | ------- | ------------ |
-| `service_vitals_config_reloads_total`     | Counter | 配置重载次数 |
-| `service_vitals_notifications_sent_total` | Counter | 发送通知总数 |
-| `service_vitals_active_services`          | Gauge   | 活跃服务数量 |
-
-### Prometheus配置
-
-在Prometheus配置文件中添加Service Vitals作为监控目标：
-
-```yaml
-# prometheus.yml
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: 'service-vitals'
-    static_configs:
-      - targets: ['localhost:8080']
-    scrape_interval: 30s
-    metrics_path: '/metrics'
-```
-
-### Grafana仪表板
-
-#### 导入预制仪表板
-
-1. 下载仪表板配置文件：
-
-```bash
-curl -o service-vitals-dashboard.json https://raw.githubusercontent.com/flyGetHu/service-vitals/main/grafana/dashboard.json
-```
-
-2. 在Grafana中导入仪表板：
-   - 访问Grafana Web界面
-   - 点击 "+" → "Import"
-   - 上传下载的JSON文件
-
-#### 关键监控面板
-
-- **服务可用性概览** - 显示所有服务的实时状态
-- **响应时间趋势** - 服务响应时间的时间序列图表
-- **错误率统计** - 失败检查的百分比和趋势
-- **告警频率** - 告警触发的频率和分布
-- **系统性能** - Service Vitals自身的性能指标
-
-### 告警规则
-
-创建Prometheus告警规则文件：
-
-```yaml
-# service-vitals-alerts.yml
-groups:
-  - name: service-vitals
-    rules:
-      - alert: ServiceDown
-        expr: service_vitals_up == 0
-        for: 2m
-        labels:
-          severity: critical
-        annotations:
-          summary: "服务 {{ $labels.service }} 不可用"
-          description: "服务 {{ $labels.service }} ({{ $labels.url }}) 已经不可用超过2分钟"
-
-      - alert: HighResponseTime
-        expr: histogram_quantile(0.95, service_vitals_response_time_seconds_bucket) > 5
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "服务 {{ $labels.service }} 响应时间过高"
-          description: "服务 {{ $labels.service }} 的95%响应时间超过5秒"
-
-      - alert: HighFailureRate
-        expr: rate(service_vitals_health_check_total{status="failed"}[5m]) / rate(service_vitals_health_check_total[5m]) > 0.1
-        for: 3m
-        labels:
-          severity: warning
-        annotations:
-          summary: "服务 {{ $labels.service }} 失败率过高"
-          description: "服务 {{ $labels.service }} 在过去5分钟内失败率超过10%"
-```
 
 ## 🛠️ 开发指南
 
