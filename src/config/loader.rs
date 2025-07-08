@@ -180,15 +180,7 @@ pub fn get_default_config_path() -> std::path::PathBuf {
         }
     }
 
-    #[cfg(windows)]
-    {
-        // Windows: %APPDATA%\ServiceVitals\config.toml
-        if let Some(config_dir) = dirs::config_dir() {
-            config_dir.join("ServiceVitals").join("config.toml")
-        } else {
-            std::path::PathBuf::from("C:\\ProgramData\\ServiceVitals\\config.toml")
-        }
-    }
+
 }
 
 #[cfg(test)]
@@ -317,10 +309,6 @@ expected_status_codes = [200]
         assert!(path.is_absolute());
         assert!(path.to_string_lossy().contains("config.toml"));
 
-        #[cfg(unix)]
         assert!(path.to_string_lossy().contains("service-vitals"));
-
-        #[cfg(windows)]
-        assert!(path.to_string_lossy().contains("ServiceVitals"));
     }
 }

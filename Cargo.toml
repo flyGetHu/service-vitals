@@ -76,14 +76,9 @@ tokio-stream = "0.1"
 rand = "0.8"
 urlencoding = "2.1"
 
-# Platform-specific dependencies
-[target.'cfg(unix)'.dependencies]
+# Linux/Unix dependencies
 nix = "0.27"
 libc = "0.2"
-
-[target.'cfg(windows)'.dependencies]
-windows-service = "0.6"
-winapi = { version = "0.3", features = ["winuser", "winsvc"] }
 
 [dev-dependencies]
 # Testing utilities

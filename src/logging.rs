@@ -409,17 +409,5 @@ impl LoggingSystem {
 
 /// 获取默认日志文件路径
 pub fn get_default_log_path() -> PathBuf {
-    #[cfg(unix)]
-    {
-        PathBuf::from("/var/log/service-vitals/service-vitals.log")
-    }
-    
-    #[cfg(windows)]
-    {
-        if let Some(data_dir) = dirs::data_local_dir() {
-            data_dir.join("ServiceVitals").join("logs").join("service-vitals.log")
-        } else {
-            PathBuf::from("C:\\ProgramData\\ServiceVitals\\logs\\service-vitals.log")
-        }
-    }
+    PathBuf::from("/var/log/service-vitals/service-vitals.log")
 }

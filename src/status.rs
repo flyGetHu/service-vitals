@@ -197,15 +197,7 @@ impl StatusManager {
 
     /// 获取默认状态文件路径
     pub fn get_default_status_file_path() -> PathBuf {
-        #[cfg(unix)]
-        {
-            PathBuf::from("/tmp/service-vitals-status.json")
-        }
-
-        #[cfg(windows)]
-        {
-            std::env::temp_dir().join("service-vitals-status.json")
-        }
+        PathBuf::from("/tmp/service-vitals-status.json")
     }
 }
 

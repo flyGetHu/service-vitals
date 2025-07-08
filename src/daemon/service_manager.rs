@@ -233,19 +233,16 @@ pub struct ServiceInfo {
 
 /// 获取平台名称
 fn get_platform_name() -> String {
-    #[cfg(windows)]
-    return "Windows".to_string();
-    
     #[cfg(target_os = "linux")]
     return "Linux".to_string();
-    
+
     #[cfg(target_os = "macos")]
     return "macOS".to_string();
-    
+
     #[cfg(target_os = "freebsd")]
     return "FreeBSD".to_string();
-    
-    #[cfg(not(any(windows, target_os = "linux", target_os = "macos", target_os = "freebsd")))]
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
     return "Unknown".to_string();
 }
 
@@ -290,7 +287,7 @@ mod tests {
     fn test_platform_name() {
         let platform = get_platform_name();
         assert!(!platform.is_empty());
-        assert!(platform == "Windows" || platform == "Linux" || platform == "macOS" || platform == "FreeBSD" || platform == "Unknown");
+        assert!(platform == "Linux" || platform == "macOS" || platform == "FreeBSD" || platform == "Unknown");
     }
 
     #[test]

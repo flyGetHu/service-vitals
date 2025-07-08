@@ -632,11 +632,7 @@ impl Command for InstallCommand {
             let service_manager = ServiceManager::new();
 
             // 创建守护进程配置
-            let mut config = if cfg!(windows) {
-                DaemonConfig::for_windows()
-            } else {
-                DaemonConfig::default()
-            };
+            let mut config = DaemonConfig::default();
 
             config.service_name = service_name.clone();
             config.display_name = display_name.clone();
