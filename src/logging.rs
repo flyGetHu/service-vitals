@@ -39,8 +39,8 @@ impl LoggingSystem {
     /// * `config` - 日志配置
     ///
     /// # 返回
-    /// * `Result<(), Box<dyn std::error::Error>>` - 初始化结果
-    pub fn setup_logging(config: &LogConfig) -> Result<(), Box<dyn std::error::Error>> {
+    /// * `Result<(), anyhow::Error>` - 初始化结果
+    pub fn setup_logging(config: &LogConfig) -> anyhow::Result<()> {
         let mut builder = env_logger::Builder::new();
         
         // 设置日志级别

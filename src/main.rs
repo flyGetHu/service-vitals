@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
 
     // 初始化日志系统
     let log_config = LogConfig {
-        level: args.log_level.into(),
+        level: args.log_level.clone().into(),
         file_path: None,
         console: true,
         json_format: false,

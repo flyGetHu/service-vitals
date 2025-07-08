@@ -122,7 +122,7 @@ impl TaskScheduler {
 
         // 计算检测间隔
         let check_interval = service.check_interval_seconds.unwrap_or_else(|| {
-            let config = config.blocking_read();
+            let config = config.try_read().unwrap();
             config.check_interval_seconds
         });
 
