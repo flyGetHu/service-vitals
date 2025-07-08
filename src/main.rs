@@ -25,14 +25,12 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // 初始化日志系统
-    let log_config = LogConfig {
-        level: args.log_level.clone().into(),
-        file_path: None,
-        console: true,
-        json_format: false,
-    };
+    let mut log_config = LogConfig::default();
+    log_config.level = args.log_level.clone().into();
+    log_config.console = true;
+    log_config.json_format = false;
 
-    LoggingSystem::setup_logging(&log_config).context("初始化日志系统失败")?;
+    let _logging_system = LoggingSystem::setup_logging(log_config).context("初始化日志系统失败")?;
 
     info!("Service Vitals v{} 启动", service_vitals::VERSION);
 

@@ -41,6 +41,7 @@ pub trait ConfigLoader: Send + Sync {
 }
 
 /// TOML配置加载器实现
+#[derive(Debug, Clone)]
 pub struct TomlConfigLoader {
     /// 是否启用环境变量替换
     enable_env_substitution: bool,
