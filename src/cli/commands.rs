@@ -133,6 +133,9 @@ expected_status_codes = [200]
     /// 获取基础配置模板
     fn get_basic_config(&self) -> &'static str {
         r#"[global]
+# 飞书webhook URL
+default_feishu_webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
 # 全局检测间隔，单位秒（默认60）
 check_interval_seconds = 60
 
@@ -167,7 +170,7 @@ description = "示例Web服务健康检测"
 
     /// 获取完整配置模板
     fn get_full_config(&self) -> &'static str {
-        include_str!("../../examples/config.toml")
+        include_str!("../../examples/minimal_config.toml")
     }
 }
 

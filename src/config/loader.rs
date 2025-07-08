@@ -172,11 +172,14 @@ impl ConfigLoader for TomlConfigLoader {
 pub fn get_default_config_path() -> std::path::PathBuf {
     #[cfg(unix)]
     {
-        // Linux/macOS: ~/.config/service-vitals/config.toml 或 /etc/service-vitals/config.toml
-        if let Some(config_dir) = dirs::config_dir() {
-            config_dir.join("service-vitals").join("config.toml")
+        // Linux/macOS: ~/.config/service-vitals/config.toml 或 当前目录/config.toml
+        // 先检测当前目录是否存在config.toml，不存在则检测~/.config/service-vitals/config.toml
+        if std::path::Path::new("config.toml").exists() {
+            std::path::PathBuf::from("config.toml")
         } else {
-            std::path::PathBuf::from("/etc/service-vitals/config.toml")
+            dirs::config_dir()
+                .map(|config_dir| config_dir.join("service-vitals").join("config.toml"))
+                .unwrap_or_else(|| std::path::PathBuf::from("config.toml"))
         }
     }
 

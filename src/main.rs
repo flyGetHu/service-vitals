@@ -6,11 +6,12 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use service_vitals::cli::args::{Args, Commands};
 use service_vitals::cli::commands::{
-    CheckCommand, Command, InitCommand, StatusCommand, StopCommand, TestNotificationCommand,
-    ValidateCommand, VersionCommand, InstallCommand, UninstallCommand, StartServiceCommand,
-    StopServiceCommand, RestartServiceCommand, ServiceStatusCommand,
+    CheckCommand, Command, InitCommand, InstallCommand, RestartServiceCommand,
+    ServiceStatusCommand, StartServiceCommand, StatusCommand, StopCommand, StopServiceCommand,
+    TestNotificationCommand, UninstallCommand, ValidateCommand, VersionCommand,
 };
-use service_vitals::config::{ConfigLoader, TomlConfigLoader, ConfigWatcher};
+use service_vitals::config::{ConfigLoader, ConfigWatcher, TomlConfigLoader};
+use service_vitals::daemon::{DaemonConfig, DaemonRuntime};
 use service_vitals::health::{HttpHealthChecker, Scheduler, TaskScheduler};
 use service_vitals::logging::{LogConfig, LoggingSystem};
 use service_vitals::notification::sender::NoOpSender;
@@ -19,6 +20,7 @@ use service_vitals::status::StatusManager;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
+use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 #[tokio::main]
@@ -150,6 +152,88 @@ async fn execute_start_command(
 ) -> Result<()> {
     info!("启动健康检测服务...");
 
+    // 检查是否需要以守护进程模式运行
+    let should_daemonize = args.daemon && !foreground;
+
+    if should_daemonize {
+        return start_daemon_mode(args, interval, max_concurrent).await;
+    } else {
+        return start_foreground_mode(args, interval, max_concurrent).await;
+    }
+}
+
+/// 守护进程模式启动
+async fn start_daemon_mode(
+    args: &Args,
+    interval: Option<u64>,
+    max_concurrent: Option<usize>,
+) -> Result<()> {
+    info!("以守护进程模式启动服务...");
+
+    // 创建守护进程配置
+    let mut daemon_config = if args.workdir.is_some() || args.pid_file.is_some() {
+        DaemonConfig::for_development()
+    } else {
+        DaemonConfig::default()
+    };
+
+    // 应用命令行参数覆盖
+    daemon_config.config_path = args.get_config_path();
+    if let Some(ref workdir) = args.workdir {
+        daemon_config.working_directory = workdir.clone();
+    }
+    if let Some(ref pid_file) = args.pid_file {
+        daemon_config.pid_file = Some(pid_file.clone());
+    }
+
+    // 创建守护进程运行时
+    let mut daemon_runtime = DaemonRuntime::new(daemon_config);
+
+    // 启动守护进程
+    daemon_runtime
+        .run(|shutdown_rx| async move {
+            start_service_main((*args).clone(), interval, max_concurrent, shutdown_rx)
+                .await
+                .map_err(|e| service_vitals::error::ServiceVitalsError::DaemonError(e.to_string()))
+        })
+        .await
+        .context("守护进程运行失败")
+}
+
+/// 前台模式启动
+async fn start_foreground_mode(
+    args: &Args,
+    interval: Option<u64>,
+    max_concurrent: Option<usize>,
+) -> Result<()> {
+    info!("以前台模式启动服务...");
+
+    let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
+
+    // 设置Ctrl+C信号处理
+    let shutdown_tx_clone = shutdown_tx.clone();
+    tokio::spawn(async move {
+        match signal::ctrl_c().await {
+            Ok(()) => {
+                info!("收到中断信号，正在停止服务...");
+                let _ = shutdown_tx_clone.send(());
+            }
+            Err(err) => {
+                error!("监听中断信号失败: {}", err);
+            }
+        }
+    });
+
+    start_service_main(args.clone(), interval, max_concurrent, shutdown_rx).await
+}
+
+/// 服务主逻辑
+async fn start_service_main(
+    args: Args,
+    interval: Option<u64>,
+    max_concurrent: Option<usize>,
+    mut shutdown_rx: broadcast::Receiver<()>,
+) -> Result<()> {
     // 加载配置
     let config_path = args.get_config_path();
     let loader = TomlConfigLoader::new(true);
@@ -173,11 +257,9 @@ async fn execute_start_command(
 
     // 初始化服务状态
     for service in &config.services {
-        status_manager.add_service(
-            service.name.clone(),
-            service.url.clone(),
-            service.enabled,
-        ).await;
+        status_manager
+            .add_service(service.name.clone(), service.url.clone(), service.enabled)
+            .await;
     }
 
     // 创建HTTP健康检测器
@@ -202,7 +284,8 @@ async fn execute_start_command(
     let (mut config_watcher, config_receiver) = ConfigWatcher::new(
         &config_path,
         std::time::Duration::from_millis(500), // 500ms防抖动延迟
-    ).context("创建配置监控器失败")?;
+    )
+    .context("创建配置监控器失败")?;
 
     // 启动配置文件监控
     config_watcher.start().context("启动配置监控失败")?;
@@ -217,18 +300,19 @@ async fn execute_start_command(
 
             // 更新状态管理器中的服务列表
             for service in &change_event.new_config.services {
-                status_manager_clone.add_service(
-                    service.name.clone(),
-                    service.url.clone(),
-                    service.enabled,
-                ).await;
+                status_manager_clone
+                    .add_service(service.name.clone(), service.url.clone(), service.enabled)
+                    .await;
             }
 
             // 标记配置重载
             status_manager_clone.mark_config_reload().await;
 
             // 重新加载调度器配置
-            if let Err(e) = scheduler_clone.reload_config(change_event.new_config.services).await {
+            if let Err(e) = scheduler_clone
+                .reload_config(change_event.new_config.services)
+                .await
+            {
                 error!("配置热重载失败: {}", e);
             } else {
                 info!("配置热重载成功");
@@ -257,43 +341,20 @@ async fn execute_start_command(
 
     info!("健康检测服务已启动");
 
-    if foreground {
-        info!("在前台模式运行，按 Ctrl+C 停止服务");
-
-        // 等待中断信号
-        match signal::ctrl_c().await {
-            Ok(()) => {
-                info!("收到中断信号，正在停止服务...");
-            }
-            Err(err) => {
-                error!("监听中断信号失败: {}", err);
-            }
+    // 等待关闭信号
+    match shutdown_rx.recv().await {
+        Ok(()) => {
+            info!("收到关闭信号，正在停止服务...");
         }
-
-        // 停止调度器
-        scheduler.stop().await.context("停止任务调度器失败")?;
-
-        info!("服务已停止");
-    } else {
-        info!("在后台模式运行");
-        // TODO: 在第三阶段实现守护进程模式
-        warn!("守护进程模式尚未实现，将在前台运行");
-
-        // 等待中断信号
-        match signal::ctrl_c().await {
-            Ok(()) => {
-                info!("收到中断信号，正在停止服务...");
-            }
-            Err(err) => {
-                error!("监听中断信号失败: {}", err);
-            }
+        Err(err) => {
+            error!("等待关闭信号失败: {}", err);
         }
-
-        // 停止调度器
-        scheduler.stop().await.context("停止任务调度器失败")?;
-
-        info!("服务已停止");
     }
+
+    // 停止调度器
+    scheduler.stop().await.context("停止任务调度器失败")?;
+
+    info!("服务已停止");
 
     Ok(())
 }
