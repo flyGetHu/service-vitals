@@ -353,6 +353,7 @@ mod tests {
                 headers: HashMap::new(),
             },
             services: vec![],
+            web: crate::config::WebConfig::default(),
         }
     }
 

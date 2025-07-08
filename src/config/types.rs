@@ -12,6 +12,36 @@ pub struct Config {
     pub global: GlobalConfig,
     /// 服务配置列表
     pub services: Vec<ServiceConfig>,
+    /// Web界面配置
+    #[serde(default)]
+    pub web: WebConfig,
+}
+
+/// Web配置结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebConfig {
+    /// 是否启用Web服务器
+    #[serde(default)]
+    pub enabled: bool,
+    /// 绑定地址
+    #[serde(default = "default_bind_address")]
+    pub bind_address: String,
+    /// 绑定端口
+    #[serde(default = "default_port")]
+    pub port: u16,
+    /// API密钥认证
+    pub api_key: Option<String>,
+    /// 是否禁用认证（内网环境）
+    #[serde(default)]
+    pub disable_auth: bool,
+    /// 静态文件目录
+    pub static_dir: Option<String>,
+    /// CORS设置
+    #[serde(default = "default_cors_enabled")]
+    pub cors_enabled: bool,
+    /// 允许的CORS源
+    #[serde(default)]
+    pub cors_origins: Vec<String>,
 }
 
 /// 全局配置结构
@@ -102,6 +132,64 @@ fn default_failure_threshold() -> u32 {
 }
 fn default_enabled() -> bool {
     true
+}
+
+fn default_bind_address() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_port() -> u16 {
+    8080
+}
+
+fn default_cors_enabled() -> bool {
+    true
+}
+
+impl Default for WebConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind_address: default_bind_address(),
+            port: default_port(),
+            api_key: None,
+            disable_auth: false,
+            static_dir: None,
+            cors_enabled: default_cors_enabled(),
+            cors_origins: vec!["*".to_string()],
+        }
+    }
+}
+
+impl WebConfig {
+    /// 获取完整的绑定地址
+    pub fn socket_addr(&self) -> crate::error::Result<std::net::SocketAddr> {
+        let addr = format!("{}:{}", self.bind_address, self.port);
+        addr.parse()
+            .map_err(|e| crate::error::ServiceVitalsError::Other(anyhow::anyhow!("无效的绑定地址: {}", e)))
+    }
+
+    /// 验证配置
+    pub fn validate(&self) -> crate::error::Result<Vec<String>> {
+        let mut warnings = Vec::new();
+
+        // 检查端口范围
+        if self.port < 1024 && self.bind_address != "127.0.0.1" && self.bind_address != "localhost" {
+            warnings.push("使用特权端口(<1024)需要管理员权限".to_string());
+        }
+
+        // 检查认证配置
+        if !self.disable_auth && self.api_key.is_none() {
+            warnings.push("启用认证但未设置API密钥，建议设置api_key或启用disable_auth".to_string());
+        }
+
+        // 检查CORS配置
+        if self.cors_enabled && self.cors_origins.contains(&"*".to_string()) && !self.disable_auth {
+            warnings.push("启用了通配符CORS但未禁用认证，可能存在安全风险".to_string());
+        }
+
+        Ok(warnings)
+    }
 }
 
 /// 配置验证函数
@@ -216,6 +304,7 @@ mod tests {
                 headers: HashMap::new(),
                 body: None,
             }],
+            web: WebConfig::default(),
         }
     }
 
