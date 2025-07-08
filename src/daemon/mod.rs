@@ -10,11 +10,7 @@ use async_trait::async_trait;
 pub mod signal_handler;
 pub mod service_manager;
 
-#[cfg(unix)]
 pub mod unix;
-
-#[cfg(windows)]
-pub mod windows;
 
 /// 守护进程配置
 #[derive(Debug, Clone)]
@@ -59,17 +55,7 @@ impl Default for DaemonConfig {
 }
 
 impl DaemonConfig {
-    /// 创建Windows配置
-    pub fn for_windows() -> Self {
-        let mut config = Self::default();
-        config.config_path = PathBuf::from("C:\\ProgramData\\ServiceVitals\\config.toml");
-        config.working_directory = PathBuf::from("C:\\ProgramData\\ServiceVitals");
-        config.pid_file = None;
-        config.log_file = Some(PathBuf::from("C:\\ProgramData\\ServiceVitals\\service-vitals.log"));
-        config.user = None;
-        config.group = None;
-        config
-    }
+
 
     /// 创建开发环境配置
     pub fn for_development() -> Self {
@@ -124,25 +110,16 @@ pub trait DaemonManager: Send + Sync {
     async fn is_installed(&self, service_name: &str) -> Result<bool>;
 }
 
-/// 平台特定的守护进程管理器枚举
-pub enum PlatformDaemonManager {
-    #[cfg(unix)]
-    Unix(unix::UnixDaemonManager),
-    #[cfg(windows)]
-    Windows(windows::WindowsServiceManager),
+/// Linux/Unix守护进程管理器
+pub struct PlatformDaemonManager {
+    unix_manager: unix::UnixDaemonManager,
 }
 
 impl PlatformDaemonManager {
-    /// 创建平台特定的守护进程管理器
+    /// 创建Linux/Unix守护进程管理器
     pub fn new() -> Self {
-        #[cfg(unix)]
-        {
-            Self::Unix(unix::UnixDaemonManager::new())
-        }
-
-        #[cfg(windows)]
-        {
-            Self::Windows(windows::WindowsServiceManager::new())
+        Self {
+            unix_manager: unix::UnixDaemonManager::new(),
         }
     }
 }
@@ -150,66 +127,31 @@ impl PlatformDaemonManager {
 #[async_trait]
 impl DaemonManager for PlatformDaemonManager {
     async fn install(&self, config: &DaemonConfig) -> Result<()> {
-        match self {
-            #[cfg(unix)]
-            Self::Unix(manager) => manager.install(config).await,
-            #[cfg(windows)]
-            Self::Windows(manager) => manager.install(config).await,
-        }
+        self.unix_manager.install(config).await
     }
 
     async fn uninstall(&self, service_name: &str) -> Result<()> {
-        match self {
-            #[cfg(unix)]
-            Self::Unix(manager) => manager.uninstall(service_name).await,
-            #[cfg(windows)]
-            Self::Windows(manager) => manager.uninstall(service_name).await,
-        }
+        self.unix_manager.uninstall(service_name).await
     }
 
     async fn start(&self, service_name: &str) -> Result<()> {
-        match self {
-            #[cfg(unix)]
-            Self::Unix(manager) => manager.start(service_name).await,
-            #[cfg(windows)]
-            Self::Windows(manager) => manager.start(service_name).await,
-        }
+        self.unix_manager.start(service_name).await
     }
 
     async fn stop(&self, service_name: &str) -> Result<()> {
-        match self {
-            #[cfg(unix)]
-            Self::Unix(manager) => manager.stop(service_name).await,
-            #[cfg(windows)]
-            Self::Windows(manager) => manager.stop(service_name).await,
-        }
+        self.unix_manager.stop(service_name).await
     }
 
     async fn restart(&self, service_name: &str) -> Result<()> {
-        match self {
-            #[cfg(unix)]
-            Self::Unix(manager) => manager.restart(service_name).await,
-            #[cfg(windows)]
-            Self::Windows(manager) => manager.restart(service_name).await,
-        }
+        self.unix_manager.restart(service_name).await
     }
 
     async fn status(&self, service_name: &str) -> Result<DaemonStatus> {
-        match self {
-            #[cfg(unix)]
-            Self::Unix(manager) => manager.status(service_name).await,
-            #[cfg(windows)]
-            Self::Windows(manager) => manager.status(service_name).await,
-        }
+        self.unix_manager.status(service_name).await
     }
 
     async fn is_installed(&self, service_name: &str) -> Result<bool> {
-        match self {
-            #[cfg(unix)]
-            Self::Unix(manager) => manager.is_installed(service_name).await,
-            #[cfg(windows)]
-            Self::Windows(manager) => manager.is_installed(service_name).await,
-        }
+        self.unix_manager.is_installed(service_name).await
     }
 }
 
@@ -328,13 +270,7 @@ mod tests {
         assert!(config.group.is_none());
     }
 
-    #[cfg(windows)]
-    #[test]
-    fn test_daemon_config_for_windows() {
-        let config = DaemonConfig::for_windows();
-        assert_eq!(config.config_path, PathBuf::from("C:\\ProgramData\\ServiceVitals\\config.toml"));
-        assert!(config.pid_file.is_none());
-    }
+
 
     #[tokio::test]
     async fn test_daemon_runtime_creation() {

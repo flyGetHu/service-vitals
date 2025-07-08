@@ -1,34 +1,20 @@
 //! 信号处理模块
 //!
-//! 提供跨平台的信号处理和优雅关闭支持
+//! 提供Linux/Unix信号处理和优雅关闭支持
 
 use crate::error::Result;
 use log::{info, warn, error};
 use tokio::sync::broadcast;
 
-#[cfg(unix)]
 use signal_hook::consts::{SIGINT, SIGTERM, SIGUSR1};
-#[cfg(unix)]
 use signal_hook_tokio::Signals;
-
-#[cfg(windows)]
-use tokio::signal::windows::{ctrl_c, ctrl_break, ctrl_close, ctrl_logoff, ctrl_shutdown};
 
 /// 设置信号处理器
 pub async fn setup_signal_handlers(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
-    #[cfg(unix)]
-    {
-        setup_unix_signals(shutdown_tx).await
-    }
-    
-    #[cfg(windows)]
-    {
-        setup_windows_signals(shutdown_tx).await
-    }
+    setup_unix_signals(shutdown_tx).await
 }
 
-/// Unix系统信号处理
-#[cfg(unix)]
+/// Unix/Linux系统信号处理
 async fn setup_unix_signals(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
     use futures::stream::StreamExt;
     
@@ -82,66 +68,7 @@ async fn setup_unix_signals(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
     Ok(())
 }
 
-/// Windows系统信号处理
-#[cfg(windows)]
-async fn setup_windows_signals(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
-    // Ctrl+C 处理
-    let shutdown_tx_c = shutdown_tx.clone();
-    tokio::spawn(async move {
-        let mut ctrl_c = ctrl_c().expect("Failed to listen for ctrl_c");
-        ctrl_c.recv().await;
-        info!("接收到 Ctrl+C 信号，开始优雅关闭...");
-        if let Err(e) = shutdown_tx_c.send(()) {
-            error!("发送关闭信号失败: {}", e);
-        }
-    });
-    
-    // Ctrl+Break 处理
-    let shutdown_tx_break = shutdown_tx.clone();
-    tokio::spawn(async move {
-        let mut ctrl_break = ctrl_break().expect("Failed to listen for ctrl_break");
-        ctrl_break.recv().await;
-        info!("接收到 Ctrl+Break 信号，开始优雅关闭...");
-        if let Err(e) = shutdown_tx_break.send(()) {
-            error!("发送关闭信号失败: {}", e);
-        }
-    });
-    
-    // 系统关闭处理
-    let shutdown_tx_close = shutdown_tx.clone();
-    tokio::spawn(async move {
-        let mut ctrl_close = ctrl_close().expect("Failed to listen for ctrl_close");
-        ctrl_close.recv().await;
-        info!("接收到系统关闭信号，开始优雅关闭...");
-        if let Err(e) = shutdown_tx_close.send(()) {
-            error!("发送关闭信号失败: {}", e);
-        }
-    });
-    
-    // 用户注销处理
-    let shutdown_tx_logoff = shutdown_tx.clone();
-    tokio::spawn(async move {
-        let mut ctrl_logoff = ctrl_logoff().expect("Failed to listen for ctrl_logoff");
-        ctrl_logoff.recv().await;
-        info!("接收到用户注销信号，开始优雅关闭...");
-        if let Err(e) = shutdown_tx_logoff.send(()) {
-            error!("发送关闭信号失败: {}", e);
-        }
-    });
-    
-    // 系统关机处理
-    let shutdown_tx_shutdown = shutdown_tx;
-    tokio::spawn(async move {
-        let mut ctrl_shutdown = ctrl_shutdown().expect("Failed to listen for ctrl_shutdown");
-        ctrl_shutdown.recv().await;
-        info!("接收到系统关机信号，开始优雅关闭...");
-        if let Err(e) = shutdown_tx_shutdown.send(()) {
-            error!("发送关闭信号失败: {}", e);
-        }
-    });
-    
-    Ok(())
-}
+
 
 /// 等待关闭信号
 pub async fn wait_for_shutdown(mut shutdown_rx: broadcast::Receiver<()>) {
