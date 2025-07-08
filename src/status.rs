@@ -57,6 +57,7 @@ pub struct OverallStatus {
 }
 
 /// 状态管理器
+#[derive(Debug)]
 pub struct StatusManager {
     /// 服务状态映射
     service_status: Arc<RwLock<HashMap<String, ServiceStatus>>>,

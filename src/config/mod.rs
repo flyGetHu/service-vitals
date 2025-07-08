@@ -8,7 +8,7 @@ pub mod manager;
 pub mod watcher;
 
 // 重新导出主要类型
-pub use types::{Config, GlobalConfig, ServiceConfig, validate_config};
+pub use types::{Config, GlobalConfig, ServiceConfig, WebConfig, validate_config};
 pub use loader::{ConfigLoader, TomlConfigLoader};
 pub use manager::{ConfigManager, ConfigDiff, ConfigUpdateNotification};
 pub use watcher::{ConfigChangeEvent, ConfigWatcher};

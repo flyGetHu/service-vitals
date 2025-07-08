@@ -69,6 +69,13 @@ base64 = "0.21"
 signal-hook = "0.3"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 
+# Web server and metrics
+warp = "0.3"
+prometheus = "0.13"
+tokio-stream = "0.1"
+rand = "0.8"
+urlencoding = "2.1"
+
 # Platform-specific dependencies
 [target.'cfg(unix)'.dependencies]
 nix = "0.27"
