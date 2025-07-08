@@ -111,10 +111,12 @@ impl MessageTemplate for SimpleTemplate {
     }
 }
 
-/// Handlebars模板（占位符实现）
+/// Handlebars模板实现
 pub struct HandlebarsTemplate {
-    /// 模板字符串
-    template: String,
+    /// Handlebars注册表
+    handlebars: handlebars::Handlebars<'static>,
+    /// 模板名称
+    template_name: String,
 }
 
 impl HandlebarsTemplate {
@@ -126,47 +128,153 @@ impl HandlebarsTemplate {
     /// # 返回
     /// * `Result<Self>` - 模板实例
     pub fn new(template: String) -> Result<Self> {
-        // TODO: 在第二阶段实现真正的Handlebars支持
-        Ok(Self { template })
+        let mut handlebars = handlebars::Handlebars::new();
+        let template_name = "message_template".to_string();
+
+        // 注册模板
+        handlebars
+            .register_template_string(&template_name, &template)
+            .map_err(|e| anyhow::anyhow!("注册Handlebars模板失败: {}", e))?;
+
+        // 注册自定义helper
+        handlebars.register_helper("format_time", Box::new(format_time_helper));
+        handlebars.register_helper("status_emoji", Box::new(status_emoji_helper));
+
+        Ok(Self {
+            handlebars,
+            template_name,
+        })
     }
 }
 
 impl MessageTemplate for HandlebarsTemplate {
     fn render(&self, context: &TemplateContext) -> Result<String> {
-        // 暂时使用简单的字符串替换
-        let simple_template = SimpleTemplate::new(self.template.clone());
-        simple_template.render(context)
+        // 将TemplateContext转换为JSON值
+        let mut data = serde_json::Map::new();
+        data.insert("service_name".to_string(), serde_json::Value::String(context.service_name.clone()));
+        data.insert("service_url".to_string(), serde_json::Value::String(context.service_url.clone()));
+        data.insert("response_time".to_string(), serde_json::Value::Number(context.response_time.into()));
+        data.insert("timestamp".to_string(), serde_json::Value::String(context.timestamp.clone()));
+
+        if let Some(status_code) = context.status_code {
+            data.insert("status_code".to_string(), serde_json::Value::Number(status_code.into()));
+        }
+
+        if let Some(ref error_message) = context.error_message {
+            data.insert("error_message".to_string(), serde_json::Value::String(error_message.clone()));
+        }
+
+        // 添加自定义字段
+        for (key, value) in &context.custom_fields {
+            data.insert(key.clone(), value.clone());
+        }
+
+        let json_data = serde_json::Value::Object(data);
+
+        self.handlebars
+            .render(&self.template_name, &json_data)
+            .map_err(|e| anyhow::anyhow!("渲染Handlebars模板失败: {}", e))
     }
 
     fn validate(&self) -> Result<()> {
-        // TODO: 在第二阶段实现真正的Handlebars语法验证
+        // Handlebars模板在注册时已经验证过语法
         Ok(())
     }
+}
+
+/// 时间格式化helper
+fn format_time_helper(
+    h: &handlebars::Helper,
+    _: &handlebars::Handlebars,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
+    let timestamp = h.param(0)
+        .and_then(|v| v.value().as_str())
+        .ok_or_else(|| handlebars::RenderError::new("时间戳参数无效"))?;
+
+    // 这里可以添加更复杂的时间格式化逻辑
+    out.write(timestamp)?;
+    Ok(())
+}
+
+/// 状态表情符号helper
+fn status_emoji_helper(
+    h: &handlebars::Helper,
+    _: &handlebars::Handlebars,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
+    let is_healthy = h.param(0)
+        .and_then(|v| v.value().as_bool())
+        .unwrap_or(false);
+
+    let emoji = if is_healthy { "✅" } else { "❌" };
+    out.write(emoji)?;
+    Ok(())
 }
 
 /// 默认的告警消息模板
 pub fn default_alert_template() -> String {
     r#"🚨 **服务告警**
+
+**基本信息**
 - **服务名称**: {{service_name}}
 - **服务URL**: {{service_url}}
-- **状态码**: {{status_code}}
+{{#if service_description}}
+- **服务描述**: {{service_description}}
+{{/if}}
+
+**检测结果**
+- **状态码**: {{#if status_code}}{{status_code}}{{else}}N/A{{/if}}
 - **响应时间**: {{response_time}}ms
 - **检测时间**: {{timestamp}}
+- **健康状态**: {{status_emoji health_status}} {{health_status}}
+
 {{#if error_message}}
-- **错误信息**: {{error_message}}
-{{/if}}"#
+**错误详情**
+```
+{{error_message}}
+```
+{{/if}}
+
+---
+*Service Vitals 自动监控*"#
         .to_string()
 }
 
 /// 默认的恢复消息模板
 pub fn default_recovery_template() -> String {
     r#"✅ **服务恢复**
+
+**基本信息**
 - **服务名称**: {{service_name}}
 - **服务URL**: {{service_url}}
+{{#if service_description}}
+- **服务描述**: {{service_description}}
+{{/if}}
+
+**恢复详情**
 - **状态码**: {{status_code}}
 - **响应时间**: {{response_time}}ms
-- **恢复时间**: {{timestamp}}"#
+- **恢复时间**: {{timestamp}}
+- **健康状态**: {{status_emoji true}} 正常
+
+---
+*Service Vitals 自动监控*"#
         .to_string()
+}
+
+/// 创建默认的告警模板
+pub fn create_default_alert_template() -> Result<Box<dyn MessageTemplate>> {
+    Ok(Box::new(HandlebarsTemplate::new(default_alert_template())?))
+}
+
+/// 创建默认的恢复模板
+pub fn create_default_recovery_template() -> Result<Box<dyn MessageTemplate>> {
+    Ok(Box::new(HandlebarsTemplate::new(default_recovery_template())?))
 }
 
 #[cfg(test)]

@@ -238,6 +238,28 @@ pub enum Commands {
         #[arg(short, long, value_enum, default_value = "text", help = "输出格式")]
         format: OutputFormat,
     },
+
+    /// 测试通知功能
+    TestNotification {
+        /// 通知类型
+        #[arg(
+            short,
+            long,
+            value_enum,
+            default_value = "feishu",
+            help = "通知类型"
+        )]
+        notification_type: NotificationType,
+
+        /// 测试消息内容
+        #[arg(
+            short,
+            long,
+            default_value = "这是一条测试消息",
+            help = "测试消息内容"
+        )]
+        message: String,
+    },
 }
 
 /// 输出格式枚举
@@ -262,6 +284,17 @@ pub enum ConfigTemplate {
     Full,
     /// 最小模板
     Minimal,
+}
+
+/// 通知类型枚举
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
+pub enum NotificationType {
+    /// 飞书通知
+    Feishu,
+    /// 邮件通知（未实现）
+    Email,
+    /// Webhook通知（未实现）
+    Webhook,
 }
 
 impl Args {

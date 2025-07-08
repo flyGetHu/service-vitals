@@ -6,7 +6,8 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use service_vitals::cli::args::{Args, Commands};
 use service_vitals::cli::commands::{
-    CheckCommand, Command, InitCommand, StatusCommand, StopCommand, ValidateCommand, VersionCommand,
+    CheckCommand, Command, InitCommand, StatusCommand, StopCommand, TestNotificationCommand,
+    ValidateCommand, VersionCommand,
 };
 use service_vitals::config::{ConfigLoader, TomlConfigLoader};
 use service_vitals::health::{HttpHealthChecker, Scheduler, TaskScheduler};
@@ -104,6 +105,13 @@ async fn execute_command(args: &Args) -> Result<()> {
         }
         Commands::Version { format: _ } => {
             let command = VersionCommand;
+            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+        }
+        Commands::TestNotification {
+            notification_type: _,
+            message: _,
+        } => {
+            let command = TestNotificationCommand;
             command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
         }
     }
