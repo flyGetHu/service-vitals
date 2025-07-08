@@ -13,6 +13,7 @@ pub mod cli;
 pub mod notification;
 pub mod error;
 pub mod logging;
+pub mod status;
 
 // 重新导出主要类型
 pub use config::{Config, GlobalConfig, ServiceConfig};

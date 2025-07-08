@@ -8,6 +8,7 @@ use crate::error::Result;
 use crate::health::{HealthChecker, HttpHealthChecker};
 use crate::notification::{FeishuSender, NotificationSender};
 use crate::notification::sender::{NotificationMessage, MessageType};
+use crate::status::{StatusManager, OverallStatus};
 use async_trait::async_trait;
 use std::path::Path;
 use std::time::Duration;
@@ -434,11 +435,189 @@ pub struct StatusCommand;
 
 #[async_trait]
 impl Command for StatusCommand {
-    async fn execute(&self, _args: &Args) -> Result<()> {
-        println!("查看服务状态...");
-        // TODO: 实现状态查看逻辑
-        println!("服务状态: 运行中（占位符实现）");
+    async fn execute(&self, args: &Args) -> Result<()> {
+        if let Commands::Status { format, verbose } = &args.command {
+            let status_file = StatusManager::get_default_status_file_path();
+
+            // 尝试从状态文件加载状态
+            match StatusManager::load_from_file(&status_file).await {
+                Ok(status) => {
+                    self.display_status(&status, format, *verbose).await?;
+                }
+                Err(_) => {
+                    // 如果没有状态文件，显示服务未运行
+                    match format {
+                        OutputFormat::Json => {
+                            let error_info = serde_json::json!({
+                                "error": "服务未运行或状态文件不存在",
+                                "status": "stopped"
+                            });
+                            println!("{}", serde_json::to_string_pretty(&error_info)?);
+                        }
+                        OutputFormat::Yaml => {
+                            println!("error: 服务未运行或状态文件不存在");
+                            println!("status: stopped");
+                        }
+                        OutputFormat::Text | OutputFormat::Table => {
+                            println!("❌ 服务未运行或状态文件不存在");
+                            println!("请使用 'service-vitals start' 启动服务");
+                        }
+                    }
+                }
+            }
+        }
         Ok(())
+    }
+}
+
+impl StatusCommand {
+    async fn display_status(&self, status: &OverallStatus, format: &OutputFormat, verbose: bool) -> Result<()> {
+        match format {
+            OutputFormat::Json => {
+                if verbose {
+                    println!("{}", serde_json::to_string_pretty(status)?);
+                } else {
+                    let summary = serde_json::json!({
+                        "total_services": status.total_services,
+                        "healthy_services": status.healthy_services,
+                        "unhealthy_services": status.unhealthy_services,
+                        "disabled_services": status.disabled_services,
+                        "start_time": status.start_time,
+                        "last_config_reload": status.last_config_reload
+                    });
+                    println!("{}", serde_json::to_string_pretty(&summary)?);
+                }
+            }
+            OutputFormat::Yaml => {
+                if verbose {
+                    // 简单的YAML输出
+                    println!("start_time: {}", status.start_time);
+                    println!("config_path: {}", status.config_path.display());
+                    println!("total_services: {}", status.total_services);
+                    println!("healthy_services: {}", status.healthy_services);
+                    println!("unhealthy_services: {}", status.unhealthy_services);
+                    println!("disabled_services: {}", status.disabled_services);
+                    if let Some(reload_time) = status.last_config_reload {
+                        println!("last_config_reload: {}", reload_time);
+                    }
+                    println!("services:");
+                    for service in &status.services {
+                        println!("  - name: {}", service.name);
+                        println!("    url: {}", service.url);
+                        println!("    status: {:?}", service.status);
+                        println!("    enabled: {}", service.enabled);
+                        if let Some(last_check) = service.last_check {
+                            println!("    last_check: {}", last_check);
+                        }
+                        if let Some(status_code) = service.status_code {
+                            println!("    status_code: {}", status_code);
+                        }
+                        if let Some(response_time) = service.response_time_ms {
+                            println!("    response_time_ms: {}", response_time);
+                        }
+                    }
+                } else {
+                    println!("total_services: {}", status.total_services);
+                    println!("healthy_services: {}", status.healthy_services);
+                    println!("unhealthy_services: {}", status.unhealthy_services);
+                    println!("disabled_services: {}", status.disabled_services);
+                }
+            }
+            OutputFormat::Text | OutputFormat::Table => {
+                self.display_text_status(status, verbose).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn display_text_status(&self, status: &OverallStatus, verbose: bool) -> Result<()> {
+        println!("🔍 Service Vitals 状态报告");
+        println!("生成时间: {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+        println!();
+
+        // 总体状态
+        println!("📊 总体状态:");
+        println!("  启动时间: {}", status.start_time.format("%Y-%m-%d %H:%M:%S UTC"));
+        println!("  配置文件: {}", status.config_path.display());
+        println!("  总服务数: {}", status.total_services);
+        println!("  健康服务: {} ✅", status.healthy_services);
+        println!("  异常服务: {} ❌", status.unhealthy_services);
+        println!("  禁用服务: {} ⏸️", status.disabled_services);
+
+        if let Some(reload_time) = status.last_config_reload {
+            println!("  最后配置重载: {}", reload_time.format("%Y-%m-%d %H:%M:%S UTC"));
+        }
+
+        println!();
+
+        // 服务详情
+        if verbose || !status.services.is_empty() {
+            println!("📋 服务详情:");
+            println!("┌─────────────────────────────────────────────────────────────────────────────────────┐");
+            println!("│ 服务名称                │ 状态 │ 状态码 │ 响应时间 │ 最后检测时间              │");
+            println!("├─────────────────────────────────────────────────────────────────────────────────────┤");
+
+            for service in &status.services {
+                let status_icon = match service.status {
+                    crate::health::HealthStatus::Up => "✅",
+                    crate::health::HealthStatus::Down => "❌",
+                    crate::health::HealthStatus::Unknown => "❓",
+                    crate::health::HealthStatus::Degraded => "⚠️",
+                };
+
+                let status_code_str = service.status_code
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "N/A".to_string());
+
+                let response_time_str = service.response_time_ms
+                    .map(|t| format!("{}ms", t))
+                    .unwrap_or_else(|| "N/A".to_string());
+
+                let last_check_str = service.last_check
+                    .map(|t| t.format("%m-%d %H:%M:%S").to_string())
+                    .unwrap_or_else(|| "从未检测".to_string());
+
+                println!("│ {:<23} │ {:<4} │ {:<6} │ {:<8} │ {:<25} │",
+                    truncate_string(&service.name, 23),
+                    status_icon,
+                    status_code_str,
+                    response_time_str,
+                    last_check_str
+                );
+
+                if verbose && service.error_message.is_some() {
+                    println!("│   错误: {:<71} │",
+                        truncate_string(service.error_message.as_ref().unwrap(), 71));
+                }
+            }
+
+            println!("└─────────────────────────────────────────────────────────────────────────────────────┘");
+        }
+
+        // 健康度总结
+        let health_percentage = if status.total_services > 0 {
+            (status.healthy_services as f64 / status.total_services as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        println!();
+        println!("💡 健康度: {:.1}% ({}/{})",
+            health_percentage,
+            status.healthy_services,
+            status.total_services
+        );
+
+        Ok(())
+    }
+}
+
+/// 截断字符串到指定长度
+fn truncate_string(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        format!("{:<width$}", s, width = max_len)
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
     }
 }
 

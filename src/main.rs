@@ -9,11 +9,12 @@ use service_vitals::cli::commands::{
     CheckCommand, Command, InitCommand, StatusCommand, StopCommand, TestNotificationCommand,
     ValidateCommand, VersionCommand,
 };
-use service_vitals::config::{ConfigLoader, TomlConfigLoader};
+use service_vitals::config::{ConfigLoader, TomlConfigLoader, ConfigWatcher};
 use service_vitals::health::{HttpHealthChecker, Scheduler, TaskScheduler};
 use service_vitals::logging::{LogConfig, LoggingSystem};
 use service_vitals::notification::sender::NoOpSender;
 use service_vitals::notification::FeishuSender;
+use service_vitals::status::StatusManager;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
@@ -142,6 +143,18 @@ async fn execute_start_command(
 
     info!("配置加载完成，服务数量: {}", config.services.len());
 
+    // 创建状态管理器
+    let status_manager = Arc::new(StatusManager::new(config_path.clone()));
+
+    // 初始化服务状态
+    for service in &config.services {
+        status_manager.add_service(
+            service.name.clone(),
+            service.url.clone(),
+            service.enabled,
+        ).await;
+    }
+
     // 创建HTTP健康检测器
     let checker = Arc::new(HttpHealthChecker::new(
         Duration::from_secs(config.global.request_timeout_seconds),
@@ -159,6 +172,57 @@ async fn execute_start_command(
 
     // 创建任务调度器
     let scheduler = Arc::new(TaskScheduler::new(checker, notifier, config.global.clone()));
+
+    // 设置配置热重载
+    let (mut config_watcher, config_receiver) = ConfigWatcher::new(
+        &config_path,
+        std::time::Duration::from_millis(500), // 500ms防抖动延迟
+    ).context("创建配置监控器失败")?;
+
+    // 启动配置文件监控
+    config_watcher.start().context("启动配置监控失败")?;
+
+    // 启动配置变更监听任务
+    let scheduler_clone = scheduler.clone();
+    let status_manager_clone = status_manager.clone();
+    tokio::spawn(async move {
+        let mut receiver = config_receiver;
+        while let Ok(change_event) = receiver.recv().await {
+            info!("检测到配置变更，版本: {}", change_event.version);
+
+            // 更新状态管理器中的服务列表
+            for service in &change_event.new_config.services {
+                status_manager_clone.add_service(
+                    service.name.clone(),
+                    service.url.clone(),
+                    service.enabled,
+                ).await;
+            }
+
+            // 标记配置重载
+            status_manager_clone.mark_config_reload().await;
+
+            // 重新加载调度器配置
+            if let Err(e) = scheduler_clone.reload_config(change_event.new_config.services).await {
+                error!("配置热重载失败: {}", e);
+            } else {
+                info!("配置热重载成功");
+            }
+        }
+    });
+
+    // 启动状态保存任务
+    let status_manager_save = status_manager.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(30)); // 每30秒保存一次状态
+        loop {
+            interval.tick().await;
+            let status_file = StatusManager::get_default_status_file_path();
+            if let Err(e) = status_manager_save.save_to_file(&status_file).await {
+                warn!("保存状态文件失败: {}", e);
+            }
+        }
+    });
 
     // 启动调度器
     scheduler
