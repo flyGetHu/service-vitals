@@ -1,0 +1,39 @@
+name: Build Windows Release
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  # 定义你的二进制文件名 (替换成你自己的)
+  BINARY_NAME: my_app 
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Build for release
+      # 使用 --release 标志进行优化构建
+      run: cargo build --verbose --release
+      
+    - name: Upload artifact
+      # 上传构建好的可执行文件
+      uses: actions/upload-artifact@v4
+      with:
+        # 产物的名称
+        name: ${{ env.BINARY_NAME }}-windows
+        # 要上传的文件路径。Windows 下的可执行文件通常在 target/release/ 目录下，且带有 .exe 后缀
+        path: target/release/${{ env.BINARY_NAME }}.exe
