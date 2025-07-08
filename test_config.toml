@@ -1,0 +1,41 @@
+# Service Vitals 测试配置文件
+
+[global]
+check_interval_seconds = 30
+log_level = "info"
+request_timeout_seconds = 10
+max_concurrent_checks = 50
+retry_attempts = 2
+retry_delay_seconds = 5
+default_feishu_webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/test-webhook"
+
+[[services]]
+name = "测试HTTP服务"
+description = "用于测试的HTTP服务"
+url = "https://httpbin.org/status/200"
+method = "GET"
+expected_status_codes = [200]
+failure_threshold = 1
+enabled = true
+
+[[services]]
+name = "测试延迟服务"
+description = "测试响应时间的服务"
+url = "https://httpbin.org/delay/1"
+method = "GET"
+expected_status_codes = [200]
+failure_threshold = 2
+enabled = true
+
+[[services]]
+name = "测试JSON API"
+description = "返回JSON数据的API"
+url = "https://httpbin.org/json"
+method = "GET"
+expected_status_codes = [200]
+failure_threshold = 1
+enabled = true
+
+[services.headers]
+"Accept" = "application/json"
+"User-Agent" = "ServiceVitals-Test/1.0"
