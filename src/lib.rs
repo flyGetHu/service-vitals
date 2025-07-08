@@ -14,6 +14,7 @@ pub mod notification;
 pub mod error;
 pub mod logging;
 pub mod status;
+pub mod daemon;
 
 // 重新导出主要类型
 pub use config::{Config, GlobalConfig, ServiceConfig};

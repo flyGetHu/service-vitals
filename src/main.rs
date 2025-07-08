@@ -7,7 +7,8 @@ use clap::Parser;
 use service_vitals::cli::args::{Args, Commands};
 use service_vitals::cli::commands::{
     CheckCommand, Command, InitCommand, StatusCommand, StopCommand, TestNotificationCommand,
-    ValidateCommand, VersionCommand,
+    ValidateCommand, VersionCommand, InstallCommand, UninstallCommand, StartServiceCommand,
+    StopServiceCommand, RestartServiceCommand, ServiceStatusCommand,
 };
 use service_vitals::config::{ConfigLoader, TomlConfigLoader, ConfigWatcher};
 use service_vitals::health::{HttpHealthChecker, Scheduler, TaskScheduler};
@@ -111,6 +112,30 @@ async fn execute_command(args: &Args) -> Result<()> {
             message: _,
         } => {
             let command = TestNotificationCommand;
+            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+        }
+        Commands::Install { .. } => {
+            let command = InstallCommand;
+            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+        }
+        Commands::Uninstall { .. } => {
+            let command = UninstallCommand;
+            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+        }
+        Commands::StartService { .. } => {
+            let command = StartServiceCommand;
+            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+        }
+        Commands::StopService { .. } => {
+            let command = StopServiceCommand;
+            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+        }
+        Commands::RestartService { .. } => {
+            let command = RestartServiceCommand;
+            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+        }
+        Commands::ServiceStatus { .. } => {
+            let command = ServiceStatusCommand;
             command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
         }
     }

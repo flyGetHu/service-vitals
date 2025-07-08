@@ -4,6 +4,7 @@
 
 use crate::cli::args::{Args, Commands, ConfigTemplate, OutputFormat, NotificationType};
 use crate::config::{ConfigLoader, TomlConfigLoader};
+use crate::daemon::{DaemonConfig, service_manager::ServiceManager};
 use crate::error::Result;
 use crate::health::{HealthChecker, HttpHealthChecker};
 use crate::notification::{FeishuSender, NotificationSender};
@@ -618,6 +619,173 @@ fn truncate_string(s: &str, max_len: usize) -> String {
         format!("{:<width$}", s, width = max_len)
     } else {
         format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
+/// 安装服务命令
+pub struct InstallCommand;
+
+#[async_trait]
+impl Command for InstallCommand {
+    async fn execute(&self, args: &Args) -> Result<()> {
+        if let Commands::Install { service_name, display_name, description, user, group } = &args.command {
+            let service_manager = ServiceManager::new();
+
+            // 创建守护进程配置
+            let mut config = if cfg!(windows) {
+                DaemonConfig::for_windows()
+            } else {
+                DaemonConfig::default()
+            };
+
+            config.service_name = service_name.clone();
+            config.display_name = display_name.clone();
+            config.description = description.clone();
+            config.config_path = args.get_config_path();
+            config.user = user.clone();
+            config.group = group.clone();
+
+            // 验证配置
+            let warnings = service_manager.validate_config(&config)?;
+            if !warnings.is_empty() {
+                println!("⚠️  配置警告:");
+                for warning in &warnings {
+                    println!("   - {}", warning);
+                }
+                println!();
+            }
+
+            // 显示建议
+            let suggestions = service_manager.suggest_config_improvements(&config);
+            if !suggestions.is_empty() {
+                println!("💡 配置建议:");
+                for suggestion in &suggestions {
+                    println!("   - {}", suggestion);
+                }
+                println!();
+            }
+
+            // 安装服务
+            println!("🔧 正在安装服务: {}", service_name);
+            service_manager.install_service(&config).await?;
+            println!("✅ 服务安装成功!");
+
+            // 显示下一步操作
+            println!("\n📋 下一步操作:");
+            println!("   启动服务: service-vitals start-service");
+            println!("   查看状态: service-vitals service-status");
+        }
+        Ok(())
+    }
+}
+
+/// 卸载服务命令
+pub struct UninstallCommand;
+
+#[async_trait]
+impl Command for UninstallCommand {
+    async fn execute(&self, args: &Args) -> Result<()> {
+        if let Commands::Uninstall { service_name } = &args.command {
+            let service_manager = ServiceManager::new();
+
+            println!("🗑️  正在卸载服务: {}", service_name);
+            service_manager.uninstall_service(service_name).await?;
+            println!("✅ 服务卸载成功!");
+        }
+        Ok(())
+    }
+}
+
+/// 启动服务命令
+pub struct StartServiceCommand;
+
+#[async_trait]
+impl Command for StartServiceCommand {
+    async fn execute(&self, args: &Args) -> Result<()> {
+        if let Commands::StartService { service_name } = &args.command {
+            let service_manager = ServiceManager::new();
+
+            println!("▶️  正在启动服务: {}", service_name);
+            service_manager.start_service(service_name).await?;
+            println!("✅ 服务启动成功!");
+        }
+        Ok(())
+    }
+}
+
+/// 停止服务命令
+pub struct StopServiceCommand;
+
+#[async_trait]
+impl Command for StopServiceCommand {
+    async fn execute(&self, args: &Args) -> Result<()> {
+        if let Commands::StopService { service_name } = &args.command {
+            let service_manager = ServiceManager::new();
+
+            println!("⏹️  正在停止服务: {}", service_name);
+            service_manager.stop_service(service_name).await?;
+            println!("✅ 服务停止成功!");
+        }
+        Ok(())
+    }
+}
+
+/// 重启服务命令
+pub struct RestartServiceCommand;
+
+#[async_trait]
+impl Command for RestartServiceCommand {
+    async fn execute(&self, args: &Args) -> Result<()> {
+        if let Commands::RestartService { service_name } = &args.command {
+            let service_manager = ServiceManager::new();
+
+            println!("🔄 正在重启服务: {}", service_name);
+            service_manager.restart_service(service_name).await?;
+            println!("✅ 服务重启成功!");
+        }
+        Ok(())
+    }
+}
+
+/// 服务状态命令
+pub struct ServiceStatusCommand;
+
+#[async_trait]
+impl Command for ServiceStatusCommand {
+    async fn execute(&self, args: &Args) -> Result<()> {
+        if let Commands::ServiceStatus { service_name, format } = &args.command {
+            let service_manager = ServiceManager::new();
+
+            let service_info = service_manager.get_service_status(service_name).await?;
+
+            match format {
+                OutputFormat::Json => {
+                    println!("{}", serde_json::to_string_pretty(&service_info)?);
+                }
+                OutputFormat::Yaml => {
+                    println!("name: {}", service_info.name);
+                    println!("status: {:?}", service_info.status);
+                    println!("is_installed: {}", service_info.is_installed);
+                    println!("platform: {}", service_info.platform);
+                }
+                OutputFormat::Text | OutputFormat::Table => {
+                    println!("🔍 服务状态报告");
+                    println!("服务名称: {}", service_info.name);
+                    println!("平台: {}", service_info.platform);
+                    println!("安装状态: {}", if service_info.is_installed { "✅ 已安装" } else { "❌ 未安装" });
+
+                    let status_display = match service_info.status {
+                        crate::daemon::DaemonStatus::Running => "✅ 运行中",
+                        crate::daemon::DaemonStatus::Stopped => "⏹️ 已停止",
+                        crate::daemon::DaemonStatus::Starting => "🔄 启动中",
+                        crate::daemon::DaemonStatus::Stopping => "⏹️ 停止中",
+                        crate::daemon::DaemonStatus::Unknown => "❓ 未知",
+                    };
+                    println!("运行状态: {}", status_display);
+                }
+            }
+        }
+        Ok(())
     }
 }
 
