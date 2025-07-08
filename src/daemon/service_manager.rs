@@ -2,17 +2,27 @@
 //!
 //! 提供跨平台的服务管理功能统一接口
 
-use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus, PlatformDaemonManager};
+#[cfg(unix)]
+use crate::daemon::PlatformDaemonManager;
+use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus};
 use crate::error::Result;
-use log::{info, error};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 
 /// 服务管理器
+#[cfg(unix)]
 pub struct ServiceManager {
     /// 平台特定的守护进程管理器
     daemon_manager: PlatformDaemonManager,
 }
 
+/// 服务管理器（非Unix系统）
+#[cfg(not(unix))]
+pub struct ServiceManager {
+    // 占位符，非Unix系统暂不支持服务管理
+}
+
+#[cfg(unix)]
 impl ServiceManager {
     /// 创建新的服务管理器
     pub fn new() -> Self {
@@ -20,13 +30,81 @@ impl ServiceManager {
             daemon_manager: PlatformDaemonManager::new(),
         }
     }
+}
 
+#[cfg(not(unix))]
+impl ServiceManager {
+    /// 创建新的服务管理器（非Unix系统）
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    /// 安装服务（非Unix系统）
+    pub async fn install_service(&self, _config: &DaemonConfig) -> Result<()> {
+        Err(crate::error::ServiceVitalsError::DaemonError(
+            "非Unix系统不支持服务安装".to_string(),
+        ))
+    }
+
+    /// 卸载服务（非Unix系统）
+    pub async fn uninstall_service(&self, _service_name: &str) -> Result<()> {
+        Err(crate::error::ServiceVitalsError::DaemonError(
+            "非Unix系统不支持服务卸载".to_string(),
+        ))
+    }
+
+    /// 启动服务（非Unix系统）
+    pub async fn start_service(&self, _service_name: &str) -> Result<()> {
+        Err(crate::error::ServiceVitalsError::DaemonError(
+            "非Unix系统不支持服务启动".to_string(),
+        ))
+    }
+
+    /// 停止服务（非Unix系统）
+    pub async fn stop_service(&self, _service_name: &str) -> Result<()> {
+        Err(crate::error::ServiceVitalsError::DaemonError(
+            "非Unix系统不支持服务停止".to_string(),
+        ))
+    }
+
+    /// 重启服务（非Unix系统）
+    pub async fn restart_service(&self, _service_name: &str) -> Result<()> {
+        Err(crate::error::ServiceVitalsError::DaemonError(
+            "非Unix系统不支持服务重启".to_string(),
+        ))
+    }
+
+    /// 获取服务状态（非Unix系统）
+    pub async fn get_service_status(&self, _service_name: &str) -> Result<ServiceInfo> {
+        Err(crate::error::ServiceVitalsError::DaemonError(
+            "非Unix系统不支持服务状态查询".to_string(),
+        ))
+    }
+
+    /// 验证配置（非Unix系统）
+    pub fn validate_config(&self, _config: &DaemonConfig) -> Result<Vec<String>> {
+        Ok(vec!["非Unix系统不支持服务配置验证".to_string()])
+    }
+
+    /// 生成服务配置建议（非Unix系统）
+    pub fn suggest_config_improvements(&self, _config: &DaemonConfig) -> Vec<String> {
+        vec!["非Unix系统不支持服务配置建议".to_string()]
+    }
+}
+
+// Unix系统的ServiceManager实现
+#[cfg(unix)]
+impl ServiceManager {
     /// 安装服务
     pub async fn install_service(&self, config: &DaemonConfig) -> Result<()> {
         info!("开始安装服务: {}", config.service_name);
-        
+
         // 检查服务是否已经安装
-        if self.daemon_manager.is_installed(&config.service_name).await? {
+        if self
+            .daemon_manager
+            .is_installed(&config.service_name)
+            .await?
+        {
             info!("服务已经安装: {}", config.service_name);
             return Ok(());
         }
@@ -34,14 +112,14 @@ impl ServiceManager {
         // 执行安装
         self.daemon_manager.install(config).await?;
         info!("服务安装完成: {}", config.service_name);
-        
+
         Ok(())
     }
 
     /// 卸载服务
     pub async fn uninstall_service(&self, service_name: &str) -> Result<()> {
         info!("开始卸载服务: {}", service_name);
-        
+
         // 检查服务是否已安装
         if !self.daemon_manager.is_installed(service_name).await? {
             info!("服务未安装: {}", service_name);
@@ -51,14 +129,14 @@ impl ServiceManager {
         // 执行卸载
         self.daemon_manager.uninstall(service_name).await?;
         info!("服务卸载完成: {}", service_name);
-        
+
         Ok(())
     }
 
     /// 启动服务
     pub async fn start_service(&self, service_name: &str) -> Result<()> {
         info!("启动服务: {}", service_name);
-        
+
         // 检查当前状态
         let current_status = self.daemon_manager.status(service_name).await?;
         if current_status == DaemonStatus::Running {
@@ -69,14 +147,14 @@ impl ServiceManager {
         // 启动服务
         self.daemon_manager.start(service_name).await?;
         info!("服务启动完成: {}", service_name);
-        
+
         Ok(())
     }
 
     /// 停止服务
     pub async fn stop_service(&self, service_name: &str) -> Result<()> {
         info!("停止服务: {}", service_name);
-        
+
         // 检查当前状态
         let current_status = self.daemon_manager.status(service_name).await?;
         if current_status == DaemonStatus::Stopped {
@@ -87,7 +165,7 @@ impl ServiceManager {
         // 停止服务
         self.daemon_manager.stop(service_name).await?;
         info!("服务停止完成: {}", service_name);
-        
+
         Ok(())
     }
 
@@ -103,7 +181,7 @@ impl ServiceManager {
     pub async fn get_service_status(&self, service_name: &str) -> Result<ServiceInfo> {
         let status = self.daemon_manager.status(service_name).await?;
         let is_installed = self.daemon_manager.is_installed(service_name).await?;
-        
+
         Ok(ServiceInfo {
             name: service_name.to_string(),
             status,
@@ -115,7 +193,7 @@ impl ServiceManager {
     /// 列出所有相关服务状态
     pub async fn list_services(&self, service_names: &[String]) -> Result<Vec<ServiceInfo>> {
         let mut services = Vec::new();
-        
+
         for service_name in service_names {
             match self.get_service_status(service_name).await {
                 Ok(info) => services.push(info),
@@ -130,7 +208,7 @@ impl ServiceManager {
                 }
             }
         }
-        
+
         Ok(services)
     }
 
@@ -140,7 +218,10 @@ impl ServiceManager {
 
         // 检查可执行文件路径
         if !config.executable_path.exists() {
-            warnings.push(format!("可执行文件不存在: {}", config.executable_path.display()));
+            warnings.push(format!(
+                "可执行文件不存在: {}",
+                config.executable_path.display()
+            ));
         }
 
         // 检查配置文件路径
@@ -150,7 +231,10 @@ impl ServiceManager {
 
         // 检查工作目录
         if !config.working_directory.exists() {
-            warnings.push(format!("工作目录不存在: {}", config.working_directory.display()));
+            warnings.push(format!(
+                "工作目录不存在: {}",
+                config.working_directory.display()
+            ));
         }
 
         // 平台特定检查
@@ -162,7 +246,7 @@ impl ServiceManager {
                     warnings.push("用户名不能为空".to_string());
                 }
             }
-            
+
             if let Some(ref group) = config.group {
                 if group.is_empty() {
                     warnings.push("组名不能为空".to_string());
@@ -192,7 +276,7 @@ impl ServiceManager {
             if config.user.is_none() {
                 suggestions.push("建议指定专用用户运行服务以提高安全性".to_string());
             }
-            
+
             if config.user.as_ref().map_or(false, |u| u == "root") {
                 suggestions.push("不建议使用root用户运行服务".to_string());
             }
@@ -262,11 +346,11 @@ mod tests {
     fn test_config_validation() {
         let manager = ServiceManager::new();
         let mut config = DaemonConfig::for_development();
-        
+
         // 设置不存在的路径
         config.executable_path = PathBuf::from("/nonexistent/path");
         config.config_path = PathBuf::from("/nonexistent/config.toml");
-        
+
         let warnings = manager.validate_config(&config).unwrap();
         assert!(!warnings.is_empty());
         assert!(warnings.iter().any(|w| w.contains("可执行文件不存在")));
@@ -277,7 +361,7 @@ mod tests {
     fn test_config_suggestions() {
         let manager = ServiceManager::new();
         let config = DaemonConfig::for_development();
-        
+
         let suggestions = manager.suggest_config_improvements(&config);
         // 应该有一些建议
         assert!(!suggestions.is_empty());
@@ -287,7 +371,12 @@ mod tests {
     fn test_platform_name() {
         let platform = get_platform_name();
         assert!(!platform.is_empty());
-        assert!(platform == "Linux" || platform == "macOS" || platform == "FreeBSD" || platform == "Unknown");
+        assert!(
+            platform == "Linux"
+                || platform == "macOS"
+                || platform == "FreeBSD"
+                || platform == "Unknown"
+        );
     }
 
     #[test]
@@ -298,10 +387,10 @@ mod tests {
             is_installed: true,
             platform: "Linux".to_string(),
         };
-        
+
         let json = serde_json::to_string(&info).unwrap();
         let deserialized: ServiceInfo = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(info.name, deserialized.name);
         assert_eq!(info.status, deserialized.status);
         assert_eq!(info.is_installed, deserialized.is_installed);

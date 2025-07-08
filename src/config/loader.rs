@@ -180,7 +180,15 @@ pub fn get_default_config_path() -> std::path::PathBuf {
         }
     }
 
-
+    #[cfg(not(unix))]
+    {
+        // Windows: %APPDATA%\service-vitals\config.toml
+        if let Some(config_dir) = dirs::config_dir() {
+            config_dir.join("service-vitals").join("config.toml")
+        } else {
+            std::path::PathBuf::from("config.toml")
+        }
+    }
 }
 
 #[cfg(test)]

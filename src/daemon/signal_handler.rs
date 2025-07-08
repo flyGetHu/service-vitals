@@ -3,21 +3,32 @@
 //! 提供Linux/Unix信号处理和优雅关闭支持
 
 use crate::error::Result;
-use log::{info, warn, error};
+use log::{error, info, warn};
 use tokio::sync::broadcast;
 
+#[cfg(unix)]
 use signal_hook::consts::{SIGINT, SIGTERM, SIGUSR1};
+#[cfg(unix)]
 use signal_hook_tokio::Signals;
 
 /// 设置信号处理器
 pub async fn setup_signal_handlers(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
-    setup_unix_signals(shutdown_tx).await
+    #[cfg(unix)]
+    {
+        setup_unix_signals(shutdown_tx).await
+    }
+    #[cfg(not(unix))]
+    {
+        info!("非Unix系统，跳过信号处理器设置");
+        Ok(())
+    }
 }
 
 /// Unix/Linux系统信号处理
+#[cfg(unix)]
 async fn setup_unix_signals(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
     use futures::stream::StreamExt;
-    
+
     let signals = Signals::new(&[SIGINT, SIGTERM, SIGUSR1])?;
     let handle = signals.handle();
 
@@ -51,24 +62,24 @@ async fn setup_unix_signals(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
             }
         }
     };
-    
+
     tokio::spawn(signals_task);
-    
+
     // 注册清理函数
     let shutdown_tx_ctrl_c = shutdown_tx.clone();
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl_c");
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for ctrl_c");
         info!("接收到 Ctrl+C，开始优雅关闭...");
         if let Err(e) = shutdown_tx_ctrl_c.send(()) {
             error!("发送关闭信号失败: {}", e);
         }
         handle.close();
     });
-    
+
     Ok(())
 }
-
-
 
 /// 等待关闭信号
 pub async fn wait_for_shutdown(mut shutdown_rx: broadcast::Receiver<()>) {
@@ -102,7 +113,7 @@ impl GracefulShutdown {
     /// 等待关闭信号或超时
     pub async fn wait_for_shutdown(&mut self) -> bool {
         let timeout = tokio::time::Duration::from_secs(self.timeout_seconds);
-        
+
         match tokio::time::timeout(timeout, self.shutdown_rx.recv()).await {
             Ok(Ok(())) => {
                 info!("接收到关闭信号");
@@ -126,22 +137,22 @@ impl GracefulShutdown {
         Fut: std::future::Future<Output = Result<()>>,
     {
         info!("开始优雅关闭流程...");
-        
+
         // 等待关闭信号
         if self.wait_for_shutdown().await {
             info!("执行清理操作...");
-            
+
             // 执行清理函数
             if let Err(e) = cleanup_fn().await {
                 error!("清理操作失败: {}", e);
                 return Err(e);
             }
-            
+
             info!("优雅关闭完成");
         } else {
             warn!("强制关闭");
         }
-        
+
         Ok(())
     }
 }
@@ -169,7 +180,7 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(!result); // 应该超时
-        // 允许一些时间误差，检查是否接近1秒
+                          // 允许一些时间误差，检查是否接近1秒
         assert!(elapsed >= Duration::from_millis(900));
         assert!(elapsed <= Duration::from_millis(1200));
     }
@@ -178,17 +189,17 @@ mod tests {
     async fn test_graceful_shutdown_signal() {
         let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
         let mut graceful_shutdown = GracefulShutdown::new(shutdown_rx, 5);
-        
+
         // 在另一个任务中发送关闭信号
         tokio::spawn(async move {
             sleep(Duration::from_millis(100)).await;
             let _ = shutdown_tx.send(());
         });
-        
+
         let start = std::time::Instant::now();
         let result = graceful_shutdown.wait_for_shutdown().await;
         let elapsed = start.elapsed();
-        
+
         assert!(result); // 应该接收到信号
         assert!(elapsed < Duration::from_secs(1)); // 应该很快完成
     }

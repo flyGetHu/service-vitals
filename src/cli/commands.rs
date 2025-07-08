@@ -2,14 +2,14 @@
 //!
 //! 实现各种CLI命令的处理逻辑
 
-use crate::cli::args::{Args, Commands, ConfigTemplate, OutputFormat, NotificationType};
+use crate::cli::args::{Args, Commands, ConfigTemplate, NotificationType, OutputFormat};
 use crate::config::{ConfigLoader, TomlConfigLoader};
-use crate::daemon::{DaemonConfig, service_manager::ServiceManager};
+use crate::daemon::{service_manager::ServiceManager, DaemonConfig};
 use crate::error::Result;
 use crate::health::{HealthChecker, HttpHealthChecker};
+use crate::notification::sender::{MessageType, NotificationMessage};
 use crate::notification::{FeishuSender, NotificationSender};
-use crate::notification::sender::{NotificationMessage, MessageType};
-use crate::status::{StatusManager, OverallStatus};
+use crate::status::{OverallStatus, StatusManager};
 use async_trait::async_trait;
 use std::path::Path;
 use std::time::Duration;
@@ -472,7 +472,12 @@ impl Command for StatusCommand {
 }
 
 impl StatusCommand {
-    async fn display_status(&self, status: &OverallStatus, format: &OutputFormat, verbose: bool) -> Result<()> {
+    async fn display_status(
+        &self,
+        status: &OverallStatus,
+        format: &OutputFormat,
+        verbose: bool,
+    ) -> Result<()> {
         match format {
             OutputFormat::Json => {
                 if verbose {
@@ -533,12 +538,18 @@ impl StatusCommand {
 
     async fn display_text_status(&self, status: &OverallStatus, verbose: bool) -> Result<()> {
         println!("🔍 Service Vitals 状态报告");
-        println!("生成时间: {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+        println!(
+            "生成时间: {}",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        );
         println!();
 
         // 总体状态
         println!("📊 总体状态:");
-        println!("  启动时间: {}", status.start_time.format("%Y-%m-%d %H:%M:%S UTC"));
+        println!(
+            "  启动时间: {}",
+            status.start_time.format("%Y-%m-%d %H:%M:%S UTC")
+        );
         println!("  配置文件: {}", status.config_path.display());
         println!("  总服务数: {}", status.total_services);
         println!("  健康服务: {} ✅", status.healthy_services);
@@ -546,7 +557,10 @@ impl StatusCommand {
         println!("  禁用服务: {} ⏸️", status.disabled_services);
 
         if let Some(reload_time) = status.last_config_reload {
-            println!("  最后配置重载: {}", reload_time.format("%Y-%m-%d %H:%M:%S UTC"));
+            println!(
+                "  最后配置重载: {}",
+                reload_time.format("%Y-%m-%d %H:%M:%S UTC")
+            );
         }
 
         println!();
@@ -566,19 +580,23 @@ impl StatusCommand {
                     crate::health::HealthStatus::Degraded => "⚠️",
                 };
 
-                let status_code_str = service.status_code
+                let status_code_str = service
+                    .status_code
                     .map(|c| c.to_string())
                     .unwrap_or_else(|| "N/A".to_string());
 
-                let response_time_str = service.response_time_ms
+                let response_time_str = service
+                    .response_time_ms
                     .map(|t| format!("{}ms", t))
                     .unwrap_or_else(|| "N/A".to_string());
 
-                let last_check_str = service.last_check
+                let last_check_str = service
+                    .last_check
                     .map(|t| t.format("%m-%d %H:%M:%S").to_string())
                     .unwrap_or_else(|| "从未检测".to_string());
 
-                println!("│ {:<23} │ {:<4} │ {:<6} │ {:<8} │ {:<25} │",
+                println!(
+                    "│ {:<23} │ {:<4} │ {:<6} │ {:<8} │ {:<25} │",
                     truncate_string(&service.name, 23),
                     status_icon,
                     status_code_str,
@@ -587,8 +605,10 @@ impl StatusCommand {
                 );
 
                 if verbose && service.error_message.is_some() {
-                    println!("│   错误: {:<71} │",
-                        truncate_string(service.error_message.as_ref().unwrap(), 71));
+                    println!(
+                        "│   错误: {:<71} │",
+                        truncate_string(service.error_message.as_ref().unwrap(), 71)
+                    );
                 }
             }
 
@@ -603,10 +623,9 @@ impl StatusCommand {
         };
 
         println!();
-        println!("💡 健康度: {:.1}% ({}/{})",
-            health_percentage,
-            status.healthy_services,
-            status.total_services
+        println!(
+            "💡 健康度: {:.1}% ({}/{})",
+            health_percentage, status.healthy_services, status.total_services
         );
 
         Ok(())
@@ -628,7 +647,14 @@ pub struct InstallCommand;
 #[async_trait]
 impl Command for InstallCommand {
     async fn execute(&self, args: &Args) -> Result<()> {
-        if let Commands::Install { service_name, display_name, description, user, group } = &args.command {
+        if let Commands::Install {
+            service_name,
+            display_name,
+            description,
+            user,
+            group,
+        } = &args.command
+        {
             let service_manager = ServiceManager::new();
 
             // 创建守护进程配置
@@ -749,7 +775,11 @@ pub struct ServiceStatusCommand;
 #[async_trait]
 impl Command for ServiceStatusCommand {
     async fn execute(&self, args: &Args) -> Result<()> {
-        if let Commands::ServiceStatus { service_name, format } = &args.command {
+        if let Commands::ServiceStatus {
+            service_name,
+            format,
+        } = &args.command
+        {
             let service_manager = ServiceManager::new();
 
             let service_info = service_manager.get_service_status(service_name).await?;
@@ -768,7 +798,14 @@ impl Command for ServiceStatusCommand {
                     println!("🔍 服务状态报告");
                     println!("服务名称: {}", service_info.name);
                     println!("平台: {}", service_info.platform);
-                    println!("安装状态: {}", if service_info.is_installed { "✅ 已安装" } else { "❌ 未安装" });
+                    println!(
+                        "安装状态: {}",
+                        if service_info.is_installed {
+                            "✅ 已安装"
+                        } else {
+                            "❌ 未安装"
+                        }
+                    );
 
                     let status_display = match service_info.status {
                         crate::daemon::DaemonStatus::Running => "✅ 运行中",
@@ -796,7 +833,8 @@ impl Command for TestNotificationCommand {
             message,
         } = &args.command
         {
-            self.test_notification(args, notification_type, message).await
+            self.test_notification(args, notification_type, message)
+                .await
         } else {
             Ok(())
         }
@@ -814,9 +852,7 @@ impl TestNotificationCommand {
         println!("测试通知功能...");
 
         match notification_type {
-            NotificationType::Feishu => {
-                self.test_feishu_notification(args, message).await
-            }
+            NotificationType::Feishu => self.test_feishu_notification(args, message).await,
             NotificationType::Email => {
                 println!("邮件通知功能尚未实现");
                 Ok(())

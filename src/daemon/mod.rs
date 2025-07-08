@@ -3,13 +3,14 @@
 //! 提供跨平台的守护进程和系统服务支持
 
 use crate::error::Result;
+use async_trait::async_trait;
 use std::path::PathBuf;
 use tokio::sync::broadcast;
-use async_trait::async_trait;
 
-pub mod signal_handler;
 pub mod service_manager;
+pub mod signal_handler;
 
+#[cfg(unix)]
 pub mod unix;
 
 /// 守护进程配置
@@ -43,7 +44,8 @@ impl Default for DaemonConfig {
             service_name: "service-vitals".to_string(),
             display_name: "Service Vitals Monitor".to_string(),
             description: "Service health monitoring and alerting system".to_string(),
-            executable_path: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("service-vitals")),
+            executable_path: std::env::current_exe()
+                .unwrap_or_else(|_| PathBuf::from("service-vitals")),
             config_path: PathBuf::from("/etc/service-vitals/config.toml"),
             working_directory: PathBuf::from("/var/lib/service-vitals"),
             pid_file: Some(PathBuf::from("/var/run/service-vitals.pid")),
@@ -55,8 +57,6 @@ impl Default for DaemonConfig {
 }
 
 impl DaemonConfig {
-
-
     /// 创建开发环境配置
     pub fn for_development() -> Self {
         let mut config = Self::default();
@@ -90,31 +90,33 @@ pub enum DaemonStatus {
 pub trait DaemonManager: Send + Sync {
     /// 安装服务
     async fn install(&self, config: &DaemonConfig) -> Result<()>;
-    
+
     /// 卸载服务
     async fn uninstall(&self, service_name: &str) -> Result<()>;
-    
+
     /// 启动服务
     async fn start(&self, service_name: &str) -> Result<()>;
-    
+
     /// 停止服务
     async fn stop(&self, service_name: &str) -> Result<()>;
-    
+
     /// 重启服务
     async fn restart(&self, service_name: &str) -> Result<()>;
-    
+
     /// 获取服务状态
     async fn status(&self, service_name: &str) -> Result<DaemonStatus>;
-    
+
     /// 检查服务是否已安装
     async fn is_installed(&self, service_name: &str) -> Result<bool>;
 }
 
 /// Linux/Unix守护进程管理器
+#[cfg(unix)]
 pub struct PlatformDaemonManager {
     unix_manager: unix::UnixDaemonManager,
 }
 
+#[cfg(unix)]
 impl PlatformDaemonManager {
     /// 创建Linux/Unix守护进程管理器
     pub fn new() -> Self {
@@ -124,6 +126,7 @@ impl PlatformDaemonManager {
     }
 }
 
+#[cfg(unix)]
 #[async_trait]
 impl DaemonManager for PlatformDaemonManager {
     async fn install(&self, config: &DaemonConfig) -> Result<()> {
@@ -156,6 +159,7 @@ impl DaemonManager for PlatformDaemonManager {
 }
 
 /// 获取平台特定的守护进程管理器
+#[cfg(unix)]
 pub fn get_daemon_manager() -> PlatformDaemonManager {
     PlatformDaemonManager::new()
 }
@@ -174,7 +178,7 @@ impl DaemonRuntime {
     /// 创建新的守护进程运行时
     pub fn new(config: DaemonConfig) -> Self {
         let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
-        
+
         Self {
             config,
             shutdown_tx,
@@ -240,7 +244,7 @@ impl DaemonRuntime {
         let pid = std::process::id();
         let mut file = fs::File::create(pid_file)?;
         writeln!(file, "{}", pid)?;
-        
+
         Ok(())
     }
 
@@ -269,8 +273,6 @@ mod tests {
         assert!(config.user.is_none());
         assert!(config.group.is_none());
     }
-
-
 
     #[tokio::test]
     async fn test_daemon_runtime_creation() {
