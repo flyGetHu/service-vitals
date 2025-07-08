@@ -19,6 +19,10 @@ pub enum ServiceVitalsError {
     #[error("通知错误: {0}")]
     Notification(#[from] NotificationError),
 
+    /// 守护进程相关错误
+    #[error("守护进程错误: {0}")]
+    DaemonError(String),
+
     /// IO错误
     #[error("IO错误: {0}")]
     Io(#[from] std::io::Error),
@@ -173,6 +177,7 @@ impl ServiceVitalsError {
                 HealthCheckError::RequestError(_) => ErrorSeverity::Medium,
             },
             ServiceVitalsError::Notification(_) => ErrorSeverity::Low,
+            ServiceVitalsError::DaemonError(_) => ErrorSeverity::High,
             ServiceVitalsError::Io(_) => ErrorSeverity::High,
             ServiceVitalsError::Json(_) => ErrorSeverity::Medium,
             ServiceVitalsError::Other(_) => ErrorSeverity::Medium,
@@ -190,6 +195,7 @@ impl ServiceVitalsError {
                 HealthCheckError::RequestError(_) => RecoveryStrategy::Retry,
             },
             ServiceVitalsError::Notification(_) => RecoveryStrategy::Retry,
+            ServiceVitalsError::DaemonError(_) => RecoveryStrategy::StopService,
             ServiceVitalsError::Io(_) => RecoveryStrategy::UseDefault,
             ServiceVitalsError::Json(_) => RecoveryStrategy::Skip,
             ServiceVitalsError::Other(_) => RecoveryStrategy::None,

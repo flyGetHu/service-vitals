@@ -65,6 +65,19 @@ hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.21"
 
+# Daemon/Service support
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+
+# Platform-specific dependencies
+[target.'cfg(unix)'.dependencies]
+nix = "0.27"
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.6"
+winapi = { version = "0.3", features = ["winuser", "winsvc"] }
+
 [dev-dependencies]
 # Testing utilities
 tokio-test = "0.4"

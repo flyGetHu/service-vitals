@@ -260,6 +260,63 @@ pub enum Commands {
         )]
         message: String,
     },
+
+    /// 安装系统服务
+    Install {
+        /// 服务名称
+        #[arg(long, default_value = "service-vitals", help = "服务名称")]
+        service_name: String,
+        /// 服务显示名称
+        #[arg(long, default_value = "Service Vitals Monitor", help = "服务显示名称")]
+        display_name: String,
+        /// 服务描述
+        #[arg(long, default_value = "Service health monitoring and alerting system", help = "服务描述")]
+        description: String,
+        /// 运行用户（仅Unix系统）
+        #[arg(long, help = "运行用户（仅Unix系统）")]
+        user: Option<String>,
+        /// 运行组（仅Unix系统）
+        #[arg(long, help = "运行组（仅Unix系统）")]
+        group: Option<String>,
+    },
+
+    /// 卸载系统服务
+    Uninstall {
+        /// 服务名称
+        #[arg(long, default_value = "service-vitals", help = "服务名称")]
+        service_name: String,
+    },
+
+    /// 启动系统服务
+    StartService {
+        /// 服务名称
+        #[arg(long, default_value = "service-vitals", help = "服务名称")]
+        service_name: String,
+    },
+
+    /// 停止系统服务
+    StopService {
+        /// 服务名称
+        #[arg(long, default_value = "service-vitals", help = "服务名称")]
+        service_name: String,
+    },
+
+    /// 重启系统服务
+    RestartService {
+        /// 服务名称
+        #[arg(long, default_value = "service-vitals", help = "服务名称")]
+        service_name: String,
+    },
+
+    /// 查看系统服务状态
+    ServiceStatus {
+        /// 服务名称
+        #[arg(long, default_value = "service-vitals", help = "服务名称")]
+        service_name: String,
+        /// 输出格式
+        #[arg(long, value_enum, default_value = "text", help = "输出格式")]
+        format: OutputFormat,
+    },
 }
 
 /// 输出格式枚举
