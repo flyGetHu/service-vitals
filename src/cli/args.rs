@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 /// Service Vitals - 跨平台服务健康监控工具
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(
     name = "service-vitals",
     version = crate::VERSION,
@@ -102,7 +102,7 @@ impl std::fmt::Display for LogLevel {
 }
 
 /// 子命令定义
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     /// 启动健康检测服务
     Start {
@@ -242,22 +242,11 @@ pub enum Commands {
     /// 测试通知功能
     TestNotification {
         /// 通知类型
-        #[arg(
-            short,
-            long,
-            value_enum,
-            default_value = "feishu",
-            help = "通知类型"
-        )]
+        #[arg(short, long, value_enum, default_value = "feishu", help = "通知类型")]
         notification_type: NotificationType,
 
         /// 测试消息内容
-        #[arg(
-            short,
-            long,
-            default_value = "这是一条测试消息",
-            help = "测试消息内容"
-        )]
+        #[arg(short, long, default_value = "这是一条测试消息", help = "测试消息内容")]
         message: String,
     },
 
@@ -270,7 +259,11 @@ pub enum Commands {
         #[arg(long, default_value = "Service Vitals Monitor", help = "服务显示名称")]
         display_name: String,
         /// 服务描述
-        #[arg(long, default_value = "Service health monitoring and alerting system", help = "服务描述")]
+        #[arg(
+            long,
+            default_value = "Service health monitoring and alerting system",
+            help = "服务描述"
+        )]
         description: String,
         /// 运行用户（仅Unix系统）
         #[arg(long, help = "运行用户（仅Unix系统）")]
