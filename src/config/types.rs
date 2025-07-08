@@ -15,7 +15,7 @@ pub struct Config {
 }
 
 /// 全局配置结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GlobalConfig {
     /// 默认飞书webhook URL
     pub default_feishu_webhook_url: Option<String>,
@@ -45,7 +45,7 @@ pub struct GlobalConfig {
 }
 
 /// 服务配置结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ServiceConfig {
     /// 服务名称
     pub name: String,

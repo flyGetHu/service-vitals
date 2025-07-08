@@ -3,6 +3,7 @@
 //! 提供健康检测任务的调度、管理和并发控制功能
 
 use crate::config::types::{GlobalConfig, ServiceConfig};
+use crate::config::{ConfigUpdateNotification, ConfigDiff};
 use crate::health::{HealthChecker, HealthStatus};
 use crate::notification::NotificationSender;
 use anyhow::{Context, Result};
@@ -10,7 +11,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{RwLock, Semaphore};
+use tokio::sync::{broadcast, RwLock, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, Instant};
 use tracing::{debug, error, info, warn};
@@ -120,6 +121,8 @@ pub struct TaskScheduler {
     status: Arc<RwLock<SchedulerStatus>>,
     /// 服务通知状态
     notification_states: Arc<RwLock<HashMap<String, ServiceNotificationState>>>,
+    /// 配置更新接收器
+    config_update_receiver: Option<broadcast::Receiver<ConfigUpdateNotification>>,
 }
 
 impl TaskScheduler {
@@ -154,6 +157,7 @@ impl TaskScheduler {
             semaphore: Arc::new(Semaphore::new(max_concurrent)),
             status: Arc::new(RwLock::new(status)),
             notification_states: Arc::new(RwLock::new(HashMap::new())),
+            config_update_receiver: None,
         }
     }
 
@@ -337,6 +341,237 @@ impl TaskScheduler {
 
         status.running_tasks = tasks.len();
         status.last_update = Instant::now();
+    }
+
+    /// 启用配置热重载
+    ///
+    /// # 参数
+    /// * `config_update_receiver` - 配置更新通知接收器
+    pub fn enable_hot_reload(&mut self, config_update_receiver: broadcast::Receiver<ConfigUpdateNotification>) {
+        info!("启用任务调度器配置热重载");
+        self.config_update_receiver = Some(config_update_receiver);
+    }
+
+    /// 启动配置更新监听器
+    pub async fn start_config_update_listener(&mut self) {
+        if let Some(mut receiver) = self.config_update_receiver.take() {
+            let tasks = Arc::clone(&self.tasks);
+            let config = Arc::clone(&self.config);
+            let status = Arc::clone(&self.status);
+            let checker = Arc::clone(&self.checker);
+            let notifier = self.notifier.clone();
+            let semaphore = Arc::clone(&self.semaphore);
+            let notification_states = Arc::clone(&self.notification_states);
+
+            tokio::spawn(async move {
+                info!("配置更新监听器已启动");
+                while let Ok(update) = receiver.recv().await {
+                    info!("收到配置更新通知，版本: {}", update.version);
+
+                    if let Err(e) = TaskScheduler::handle_config_update(
+                        update,
+                        &tasks,
+                        &config,
+                        &status,
+                        &checker,
+                        &notifier,
+                        &semaphore,
+                        &notification_states,
+                    ).await {
+                        error!("处理配置更新失败: {}", e);
+                    }
+                }
+                info!("配置更新监听器已停止");
+            });
+        }
+    }
+
+    /// 处理配置更新
+    async fn handle_config_update(
+        update: ConfigUpdateNotification,
+        tasks: &Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
+        config: &Arc<RwLock<GlobalConfig>>,
+        status: &Arc<RwLock<SchedulerStatus>>,
+        checker: &Arc<dyn HealthChecker>,
+        notifier: &Option<Arc<dyn NotificationSender>>,
+        semaphore: &Arc<Semaphore>,
+        notification_states: &Arc<RwLock<HashMap<String, ServiceNotificationState>>>,
+    ) -> Result<()> {
+        info!("处理配置更新，版本: {}, 变更数量: {}", update.version, update.diffs.len());
+
+        for diff in &update.diffs {
+            match diff {
+                ConfigDiff::GlobalConfigModified => {
+                    info!("全局配置已修改");
+                    // 全局配置修改可能需要更新并发限制等
+                    // 这里可以根据需要实现具体的更新逻辑
+                }
+                ConfigDiff::ServiceAdded(service) => {
+                    info!("添加新服务: {}", service.name);
+                    if let Err(e) = TaskScheduler::start_new_service_task(
+                        service.clone(),
+                        tasks,
+                        checker,
+                        notifier,
+                        config,
+                        semaphore,
+                        notification_states,
+                        status,
+                    ).await {
+                        error!("启动新服务任务失败: {}", e);
+                    }
+                }
+                ConfigDiff::ServiceRemoved(service_name) => {
+                    info!("移除服务: {}", service_name);
+                    TaskScheduler::stop_service_task_by_name(service_name, tasks, notification_states).await;
+                }
+                ConfigDiff::ServiceModified { old: _, new } => {
+                    info!("修改服务: {}", new.name);
+                    // 先停止旧任务
+                    TaskScheduler::stop_service_task_by_name(&new.name, tasks, notification_states).await;
+                    // 启动新任务
+                    if let Err(e) = TaskScheduler::start_new_service_task(
+                        new.clone(),
+                        tasks,
+                        checker,
+                        notifier,
+                        config,
+                        semaphore,
+                        notification_states,
+                        status,
+                    ).await {
+                        error!("重启修改的服务任务失败: {}", e);
+                    }
+                }
+            }
+        }
+
+        // 更新状态统计
+        {
+            let mut status_guard = status.write().await;
+            let tasks_guard = tasks.read().await;
+            status_guard.running_tasks = tasks_guard.len();
+            status_guard.last_update = Instant::now();
+        }
+
+        info!("配置更新处理完成");
+        Ok(())
+    }
+
+    /// 启动新服务任务
+    async fn start_new_service_task(
+        service: ServiceConfig,
+        tasks: &Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
+        checker: &Arc<dyn HealthChecker>,
+        notifier: &Option<Arc<dyn NotificationSender>>,
+        config: &Arc<RwLock<GlobalConfig>>,
+        semaphore: &Arc<Semaphore>,
+        notification_states: &Arc<RwLock<HashMap<String, ServiceNotificationState>>>,
+        status: &Arc<RwLock<SchedulerStatus>>,
+    ) -> Result<()> {
+        let service_name = service.name.clone();
+        let service_name_for_task = service_name.clone();
+        let checker = Arc::clone(checker);
+        let notifier = notifier.clone();
+        let semaphore = Arc::clone(semaphore);
+        let notification_states = Arc::clone(notification_states);
+        let status_arc = Arc::clone(status);
+
+        // 计算检测间隔
+        let check_interval = service.check_interval_seconds.unwrap_or_else(|| {
+            // 从全局配置获取默认值
+            60 // 默认60秒，实际应该从config中读取
+        });
+
+        // 初始化通知状态
+        {
+            let mut states = notification_states.write().await;
+            states.insert(service_name.clone(), ServiceNotificationState::default());
+        }
+
+        // 创建检测任务
+        let task = tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(check_interval));
+            info!("启动服务检测任务: {}", service_name_for_task);
+
+            loop {
+                interval.tick().await;
+
+                // 获取信号量许可
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(_) => {
+                        warn!("获取并发许可失败，跳过本次检测: {}", service_name_for_task);
+                        continue;
+                    }
+                };
+
+                debug!("开始检测服务: {}", service_name_for_task);
+
+                // 执行健康检测
+                let result = match checker.check(&service).await {
+                    Ok(result) => result,
+                    Err(e) => {
+                        error!("检测服务失败 {}: {}", service_name_for_task, e);
+                        continue;
+                    }
+                };
+
+                // 处理通知逻辑
+                {
+                    let mut states = notification_states.write().await;
+                    if let Some(notification_state) = states.get_mut(&service_name_for_task) {
+                        if let Err(e) = TaskScheduler::handle_notification_static(
+                            &service,
+                            &result,
+                            notification_state,
+                            &notifier,
+                            &status_arc,
+                        ).await {
+                            error!("处理通知失败: {}", e);
+                        }
+                    }
+                }
+
+                // 记录检测结果
+                if result.status.is_healthy() {
+                    debug!("服务检测正常: {}", service_name_for_task);
+                } else {
+                    warn!("服务检测失败: {}", service_name_for_task);
+                }
+            }
+        });
+
+        // 将任务添加到tasks映射中
+        {
+            let mut task_map = tasks.write().await;
+            task_map.insert(service_name.clone(), task);
+        }
+
+        info!("服务任务已启动: {}", service_name);
+        Ok(())
+    }
+
+    /// 按名称停止服务任务
+    async fn stop_service_task_by_name(
+        service_name: &str,
+        tasks: &Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
+        notification_states: &Arc<RwLock<HashMap<String, ServiceNotificationState>>>,
+    ) {
+        // 停止任务
+        {
+            let mut task_map = tasks.write().await;
+            if let Some(task) = task_map.remove(service_name) {
+                task.abort();
+                info!("已停止服务任务: {}", service_name);
+            }
+        }
+
+        // 清理通知状态
+        {
+            let mut states = notification_states.write().await;
+            states.remove(service_name);
+        }
     }
 }
 
