@@ -397,8 +397,8 @@
 
 #### 阶段3：跨平台支持和优化 (第7-9周)
 **目标：** 实现跨平台兼容性和性能优化
-**范围：** 守护进程、Windows服务、性能优化、完整CLI、监控指标
-**完成标志：** 支持所有目标平台的守护进程模式
+**范围：** 守护进程、性能优化、完整CLI、监控指标
+**完成标志：** 支持Linux/macOS平台的守护进程模式
 
 #### 阶段4：测试、文档和发布 (第10-12周)
 **目标：** 完善测试覆盖、文档和发布准备
@@ -494,7 +494,7 @@ graph TD
 - [ ] 集成测试通过率 ≥ 95%
 
 #### 阶段3完成标志
-- [ ] 支持Linux/Windows/macOS三个平台
+- [ ] 支持Linux/macOS两个平台
 - [ ] 守护进程模式正常工作
 - [ ] 性能指标达到设计要求
 - [ ] 完整CLI命令集实现
@@ -1003,22 +1003,13 @@ expected_status_codes = [200]
 #[cfg(unix)]
 pub mod unix;
 
-#[cfg(windows)]
-pub mod windows;
-
 #[cfg(unix)]
 pub use unix::UnixDaemon as PlatformDaemon;
-
-#[cfg(windows)]
-pub use windows::WindowsService as PlatformDaemon;
 
 /// 跨平台守护进程管理器
 pub struct DaemonManager {
     #[cfg(unix)]
     daemon: UnixDaemon,
-
-    #[cfg(windows)]
-    service: WindowsService,
 }
 
 impl DaemonManager {
@@ -1027,9 +1018,6 @@ impl DaemonManager {
         Self {
             #[cfg(unix)]
             daemon: UnixDaemon::new(),
-
-            #[cfg(windows)]
-            service: WindowsService::new(),
         }
     }
 
@@ -1037,9 +1025,6 @@ impl DaemonManager {
     pub fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(unix)]
         return self.daemon.start();
-
-        #[cfg(windows)]
-        return self.service.start();
     }
 }
 ```
@@ -1062,15 +1047,7 @@ pub fn get_default_config_path() -> PathBuf {
         }
     }
 
-    #[cfg(windows)]
-    {
-        // Windows: %APPDATA%\ServiceVitals\config.toml
-        if let Some(config_dir) = dirs::config_dir() {
-            config_dir.join("ServiceVitals").join("config.toml")
-        } else {
-            PathBuf::from("C:\\ProgramData\\ServiceVitals\\config.toml")
-        }
-    }
+
 }
 
 /// 获取日志文件默认路径
@@ -1080,14 +1057,7 @@ pub fn get_default_log_path() -> PathBuf {
         PathBuf::from("/var/log/service-vitals/service-vitals.log")
     }
 
-    #[cfg(windows)]
-    {
-        if let Some(data_dir) = dirs::data_local_dir() {
-            data_dir.join("ServiceVitals").join("logs").join("service-vitals.log")
-        } else {
-            PathBuf::from("C:\\ProgramData\\ServiceVitals\\logs\\service-vitals.log")
-        }
-    }
+
 }
 
 /// 获取PID文件路径
@@ -1097,11 +1067,7 @@ pub fn get_pid_file_path() -> PathBuf {
         PathBuf::from("/var/run/service-vitals.pid")
     }
 
-    #[cfg(windows)]
-    {
-        // Windows不使用PID文件，返回临时路径
-        std::env::temp_dir().join("service-vitals.pid")
-    }
+
 }
 ```
 
@@ -1121,8 +1087,7 @@ mod cross_platform_tests {
         #[cfg(unix)]
         assert!(config_path.to_string_lossy().contains("service-vitals"));
 
-        #[cfg(windows)]
-        assert!(config_path.to_string_lossy().contains("ServiceVitals"));
+
     }
 
     #[test]
@@ -1139,12 +1104,7 @@ mod cross_platform_tests {
         assert!(daemon.is_ok());
     }
 
-    #[cfg(windows)]
-    #[test]
-    fn test_windows_service_creation() {
-        let service = WindowsService::new();
-        assert!(service.is_ok());
-    }
+
 }
 ```
 
@@ -1161,13 +1121,6 @@ export SERVICE_VITALS_LOG_LEVEL=debug
 ./service-vitals start --config config.toml
 ```
 
-```powershell
-# Windows (PowerShell)
-$env:RUST_LOG = "debug"
-$env:SERVICE_VITALS_LOG_LEVEL = "debug"
-.\service-vitals.exe start --config config.toml
-```
-
 **2. 使用调试器**
 
 ```bash
@@ -1180,11 +1133,6 @@ gdb --args ./service-vitals start --config config.toml
 lldb ./service-vitals -- start --config config.toml
 (lldb) run
 (lldb) bt  # 查看调用栈
-```
-
-```powershell
-# Windows (PowerShell) - 使用Visual Studio调试器
-# 在Visual Studio中打开项目，设置断点后按F5调试
 ```
 
 **3. 性能分析**
@@ -1256,9 +1204,7 @@ Linux/macOS:
 sudo chown -R vitals:vitals /etc/service-vitals
 sudo chmod 600 /etc/service-vitals/config.toml
 
-Windows:
-以管理员身份运行PowerShell
-icacls "C:\ProgramData\ServiceVitals" /grant Users:F
+
 ```
 
 **问题4：端口占用**
@@ -1270,8 +1216,7 @@ Linux/macOS:
 netstat -tulpn | grep :8080
 kill -9 <PID>
 
-Windows:
-netstat -ano | findstr :8080
+
 taskkill /PID <PID> /F
 ```
 
@@ -1330,7 +1275,7 @@ taskkill /PID <PID> /F
 - [ ] 文档完整性检查通过
 
 **功能验收标准：**
-- [ ] 支持Linux/Windows/macOS三个平台
+- [ ] 支持Linux/macOS两个平台
 - [ ] 守护进程模式正常工作
 - [ ] 完整CLI命令集实现
 - [ ] 监控指标正确收集和导出

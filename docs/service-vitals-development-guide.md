@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-Service Vitals 是一个跨平台（Windows/Linux/macOS）的命令行服务健康检测工具，使用Rust语言开发。该工具能够定期检测配置的服务URL，并在服务异常时通过飞书webhook发送告警消息。
+Service Vitals 是一个跨平台（Linux/macOS）的命令行服务健康检测工具，使用Rust语言开发。该工具能够定期检测配置的服务URL，并在服务异常时通过飞书webhook发送告警消息。
 
 ### 核心特性
 - 支持HTTP/HTTPS服务健康检测
@@ -43,8 +43,7 @@ service-vitals/
 │   │   └── sender.rs           # 通知发送器
 │   ├── daemon/                 # 守护进程模块
 │   │   ├── mod.rs
-│   │   ├── unix.rs             # Unix系统守护进程
-│   │   └── windows.rs          # Windows服务
+│   │   └── unix.rs             # Unix系统守护进程
 │   ├── error.rs                # 错误类型定义
 │   ├── logging.rs              # 日志配置
 │   └── utils.rs                # 工具函数
@@ -151,7 +150,6 @@ pub trait DaemonManager {
 
 **主要功能：**
 - Unix系统守护进程创建
-- Windows服务注册和管理
 - 进程生命周期管理
 - 信号处理和优雅关闭
 
@@ -242,10 +240,6 @@ graph TD
 **Unix系统：**
 - `nix` - Unix系统调用
 - `daemonize` - 守护进程创建
-
-**Windows系统：**
-- `windows-service` - Windows服务管理
-- `winapi` - Windows API调用
 
 ### 2.3 开发和测试依赖
 

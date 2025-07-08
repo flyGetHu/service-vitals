@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/flyGetHu/service-vitals)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/flyGetHu/service-vitals)
 
 一个跨平台的服务健康监控工具，支持HTTP/HTTPS服务检测、实时告警通知、Web监控界面和Prometheus指标导出。
 
@@ -15,7 +15,7 @@ Service Vitals 是一个使用Rust开发的现代化服务健康监控解决方�
 - **配置热重载** - 无需重启即可更新监控配置
 - **Web监控界面** - 直观的仪表板和实时状态展示
 - **Prometheus集成** - 完整的指标导出和监控数据
-- **跨平台支持** - 原生支持Windows、Linux和macOS
+- **跨平台支持** - 原生支持Linux和macOS
 - **守护进程模式** - 支持系统服务安装和后台运行
 
 ## ✨ 功能特性
@@ -39,8 +39,7 @@ Service Vitals 是一个使用Rust开发的现代化服务健康监控解决方�
 - 状态持久化存储
 - 多格式状态输出（JSON/YAML/表格）
 
-### 🖥️ 跨平台守护进程支持
-- Windows服务注册和管理
+### 🖥️ 守护进程支持
 - Linux/macOS systemd集成
 - 进程生命周期管理
 - 优雅关闭和信号处理
@@ -67,24 +66,12 @@ Service Vitals 是一个使用Rust开发的现代化服务健康监控解决方�
 ## 📦 安装指南
 
 ### 系统要求
-- **操作系统**: Windows 10+, Linux (Ubuntu 18.04+, CentOS 7+), macOS 10.15+
+- **操作系统**: Linux (Ubuntu 18.04+, CentOS 7+), macOS 10.15+
 - **内存**: 最少64MB RAM
 - **磁盘空间**: 最少50MB可用空间
 - **网络**: 需要访问被监控服务的网络连接
 
 ### 预编译二进制文件安装
-
-#### Windows (PowerShell)
-```powershell
-# 下载最新版本
-Invoke-WebRequest -Uri "https://github.com/flyGetHu/service-vitals/releases/latest/download/service-vitals-windows.exe" -OutFile "service-vitals.exe"
-
-# 移动到系统路径
-Move-Item "service-vitals.exe" "$env:ProgramFiles\ServiceVitals\service-vitals.exe"
-
-# 添加到PATH环境变量
-$env:PATH += ";$env:ProgramFiles\ServiceVitals"
-```
 
 #### Linux/macOS (Bash)
 ```bash
@@ -264,19 +251,11 @@ service-vitals [OPTIONS] <COMMAND>
 
 #### 初始化配置
 ```bash
-# Windows (PowerShell)
-service-vitals init --template minimal
-
-# Linux/macOS (Bash)
 service-vitals init --template minimal
 ```
 
 #### 验证配置
 ```bash
-# Windows (PowerShell)
-service-vitals validate --config config.toml --verbose
-
-# Linux/macOS (Bash)
 service-vitals validate --config config.toml --verbose
 ```
 
@@ -335,19 +314,11 @@ service-vitals status --format json
 
 #### 安装系统服务
 ```bash
-# Windows (PowerShell)
-service-vitals install --service-name "ServiceVitals"
-
-# Linux/macOS (Bash)
 service-vitals install --service-name "service-vitals"
 ```
 
 #### 启动系统服务
 ```bash
-# Windows (PowerShell)
-service-vitals start-service --service-name "ServiceVitals"
-
-# Linux/macOS (Bash)
 service-vitals start-service --service-name "service-vitals"
 ```
 
@@ -506,10 +477,6 @@ scrape_configs:
 1. 下载仪表板配置文件：
 
 ```bash
-# Windows (PowerShell)
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/flyGetHu/service-vitals/main/grafana/dashboard.json" -OutFile "service-vitals-dashboard.json"
-
-# Linux/macOS (Bash)
 curl -o service-vitals-dashboard.json https://raw.githubusercontent.com/flyGetHu/service-vitals/main/grafana/dashboard.json
 ```
 
@@ -599,8 +566,7 @@ service-vitals/
 │   │   └── auth.rs             # 认证中间件
 │   ├── daemon/                 # 守护进程模块
 │   │   ├── mod.rs
-│   │   ├── unix.rs             # Unix系统守护进程
-│   │   └── windows.rs          # Windows服务
+│   │   └── unix.rs             # Unix系统守护进程
 │   ├── status.rs               # 状态管理
 │   ├── error.rs                # 错误处理
 │   └── logging.rs              # 日志系统

@@ -16,9 +16,9 @@ jobs:
 
     strategy:
       matrix:
-        # 定义构建矩阵，包含 windows 和 linux
+        # 定义构建矩阵，只包含 linux
         # 注意：Linux 构建使用的是 ubuntu-latest
-        os: [windows-latest, ubuntu-latest]
+        os: [ubuntu-latest]
 
     steps:
       - name: Checkout repository
@@ -34,13 +34,6 @@ jobs:
         run: cargo build --verbose --release
 
       # --- 准备上传的文件 ---
-      - name: Prepare artifact for Windows
-        if: matrix.os == 'windows-latest'
-        # 在 Windows 上，我们将可执行文件重命名，方便下载
-        run: |
-          mv target/release/${{ env.BINARY_NAME }}.exe target/release/${{ env.BINARY_NAME }}-windows-amd64.exe
-        shell: bash
-
       - name: Prepare artifact for Linux
         if: matrix.os == 'ubuntu-latest'
         # 在 Linux 上，我们同样重命名，并确保文件有可执行权限
@@ -56,12 +49,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           # 获取触发工作流的 Release 的上传 URL
           upload_url: ${{ github.event.release.upload_url }}
-          # 根据操作系统确定要上传的文件路径
-          asset_path: |
-            ${{ matrix.os == 'windows-latest' && format('target/release/{0}-windows-amd64.exe', env.BINARY_NAME) || '' }}
-            ${{ matrix.os == 'ubuntu-latest' && format('target/release/{0}-linux-amd64', env.BINARY_NAME) || '' }}
+          # Linux 文件路径
+          asset_path: target/release/${{ env.BINARY_NAME }}-linux-amd64
           # 上传后在 Release 页面显示的文件名
-          asset_name: |
-            ${{ matrix.os == 'windows-latest' && format('{0}-windows-amd64.exe', env.BINARY_NAME) || '' }}
-            ${{ matrix.os == 'ubuntu-latest' && format('{0}-linux-amd64', env.BINARY_NAME) || '' }}
+          asset_name: ${{ env.BINARY_NAME }}-linux-amd64
           asset_content_type: application/octet-stream
