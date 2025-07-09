@@ -451,7 +451,7 @@ impl TaskScheduler {
                         .await;
                     // 启动新任务
                     if let Err(e) = TaskScheduler::start_new_service_task(
-                        new.clone(),
+                        (**new).clone(),
                         tasks,
                         checker,
                         notifier,
@@ -486,7 +486,7 @@ impl TaskScheduler {
         tasks: &Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
         checker: &Arc<dyn HealthChecker>,
         notifier: &Option<Arc<dyn NotificationSender>>,
-        config: &Arc<RwLock<GlobalConfig>>,
+        _config: &Arc<RwLock<GlobalConfig>>,
         semaphore: &Arc<Semaphore>,
         notification_states: &Arc<RwLock<HashMap<String, ServiceNotificationState>>>,
         status: &Arc<RwLock<SchedulerStatus>>,
