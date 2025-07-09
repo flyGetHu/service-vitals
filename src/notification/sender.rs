@@ -44,11 +44,8 @@ pub trait NotificationSender: Send + Sync {
     ///
     /// # 返回
     /// * `Result<()>` - 发送结果
-    async fn send_health_alert(
-        &self,
-        service: &ServiceConfig,
-        result: &HealthResult,
-    ) -> Result<()>;
+    async fn send_health_alert(&self, service: &ServiceConfig, result: &HealthResult)
+        -> Result<()>;
 
     /// 发送自定义消息
     ///

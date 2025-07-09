@@ -3,7 +3,7 @@
 //! 提供健康检测任务的调度、管理和并发控制功能
 
 use crate::config::types::{GlobalConfig, ServiceConfig};
-use crate::config::{ConfigUpdateNotification, ConfigDiff};
+use crate::config::{ConfigDiff, ConfigUpdateNotification};
 use crate::health::{HealthChecker, HealthStatus};
 use crate::notification::NotificationSender;
 use anyhow::{Context, Result};
@@ -197,7 +197,8 @@ impl TaskScheduler {
             notification_state.consecutive_failures += 1;
 
             // 检查是否需要发送告警
-            let should_send_alert = notification_state.consecutive_failures >= service.failure_threshold
+            let should_send_alert = notification_state.consecutive_failures
+                >= service.failure_threshold
                 && !notification_state.alert_sent;
 
             if should_send_alert {
@@ -302,7 +303,9 @@ impl TaskScheduler {
                             notification_state,
                             &notifier,
                             &status_arc,
-                        ).await {
+                        )
+                        .await
+                        {
                             error!("处理通知失败: {}", e);
                         }
                     }
@@ -347,7 +350,10 @@ impl TaskScheduler {
     ///
     /// # 参数
     /// * `config_update_receiver` - 配置更新通知接收器
-    pub fn enable_hot_reload(&mut self, config_update_receiver: broadcast::Receiver<ConfigUpdateNotification>) {
+    pub fn enable_hot_reload(
+        &mut self,
+        config_update_receiver: broadcast::Receiver<ConfigUpdateNotification>,
+    ) {
         info!("启用任务调度器配置热重载");
         self.config_update_receiver = Some(config_update_receiver);
     }
@@ -377,7 +383,9 @@ impl TaskScheduler {
                         &notifier,
                         &semaphore,
                         &notification_states,
-                    ).await {
+                    )
+                    .await
+                    {
                         error!("处理配置更新失败: {}", e);
                     }
                 }
@@ -397,7 +405,11 @@ impl TaskScheduler {
         semaphore: &Arc<Semaphore>,
         notification_states: &Arc<RwLock<HashMap<String, ServiceNotificationState>>>,
     ) -> Result<()> {
-        info!("处理配置更新，版本: {}, 变更数量: {}", update.version, update.diffs.len());
+        info!(
+            "处理配置更新，版本: {}, 变更数量: {}",
+            update.version,
+            update.diffs.len()
+        );
 
         for diff in &update.diffs {
             match diff {
@@ -417,18 +429,26 @@ impl TaskScheduler {
                         semaphore,
                         notification_states,
                         status,
-                    ).await {
+                    )
+                    .await
+                    {
                         error!("启动新服务任务失败: {}", e);
                     }
                 }
                 ConfigDiff::ServiceRemoved(service_name) => {
                     info!("移除服务: {}", service_name);
-                    TaskScheduler::stop_service_task_by_name(service_name, tasks, notification_states).await;
+                    TaskScheduler::stop_service_task_by_name(
+                        service_name,
+                        tasks,
+                        notification_states,
+                    )
+                    .await;
                 }
                 ConfigDiff::ServiceModified { old: _, new } => {
                     info!("修改服务: {}", new.name);
                     // 先停止旧任务
-                    TaskScheduler::stop_service_task_by_name(&new.name, tasks, notification_states).await;
+                    TaskScheduler::stop_service_task_by_name(&new.name, tasks, notification_states)
+                        .await;
                     // 启动新任务
                     if let Err(e) = TaskScheduler::start_new_service_task(
                         new.clone(),
@@ -439,7 +459,9 @@ impl TaskScheduler {
                         semaphore,
                         notification_states,
                         status,
-                    ).await {
+                    )
+                    .await
+                    {
                         error!("重启修改的服务任务失败: {}", e);
                     }
                 }
@@ -527,7 +549,9 @@ impl TaskScheduler {
                             notification_state,
                             &notifier,
                             &status_arc,
-                        ).await {
+                        )
+                        .await
+                        {
                             error!("处理通知失败: {}", e);
                         }
                     }

@@ -19,7 +19,10 @@ pub enum LogRotation {
     /// 按时间轮转
     Time { interval: Duration },
     /// 按大小和时间轮转
-    SizeAndTime { max_size_mb: u64, interval: Duration },
+    SizeAndTime {
+        max_size_mb: u64,
+        interval: Duration,
+    },
 }
 
 /// 日志配置结构
@@ -78,9 +81,17 @@ pub enum MetricValue {
     /// 计量器
     Gauge(f64),
     /// 直方图
-    Histogram { sum: f64, count: u64, buckets: Vec<(f64, u64)> },
+    Histogram {
+        sum: f64,
+        count: u64,
+        buckets: Vec<(f64, u64)>,
+    },
     /// 摘要
-    Summary { sum: f64, count: u64, quantiles: Vec<(f64, f64)> },
+    Summary {
+        sum: f64,
+        count: u64,
+        quantiles: Vec<(f64, f64)>,
+    },
 }
 
 impl MetricsCollector {
@@ -95,7 +106,9 @@ impl MetricsCollector {
     /// 增加计数器
     pub fn increment_counter(&self, name: &str, value: u64) {
         let mut metrics = self.metrics.lock().unwrap();
-        let entry = metrics.entry(name.to_string()).or_insert(MetricValue::Counter(0));
+        let entry = metrics
+            .entry(name.to_string())
+            .or_insert(MetricValue::Counter(0));
         if let MetricValue::Counter(ref mut count) = entry {
             *count += value;
         }
@@ -110,13 +123,27 @@ impl MetricsCollector {
     /// 记录直方图值
     pub fn record_histogram(&self, name: &str, value: f64) {
         let mut metrics = self.metrics.lock().unwrap();
-        let entry = metrics.entry(name.to_string()).or_insert(MetricValue::Histogram {
-            sum: 0.0,
-            count: 0,
-            buckets: vec![(1.0, 0), (5.0, 0), (10.0, 0), (50.0, 0), (100.0, 0), (f64::INFINITY, 0)],
-        });
+        let entry = metrics
+            .entry(name.to_string())
+            .or_insert(MetricValue::Histogram {
+                sum: 0.0,
+                count: 0,
+                buckets: vec![
+                    (1.0, 0),
+                    (5.0, 0),
+                    (10.0, 0),
+                    (50.0, 0),
+                    (100.0, 0),
+                    (f64::INFINITY, 0),
+                ],
+            });
 
-        if let MetricValue::Histogram { ref mut sum, ref mut count, ref mut buckets } = entry {
+        if let MetricValue::Histogram {
+            ref mut sum,
+            ref mut count,
+            ref mut buckets,
+        } = entry
+        {
             *sum += value;
             *count += 1;
 
@@ -243,7 +270,13 @@ impl LoggingSystem {
     }
 
     /// 记录审计日志
-    pub fn audit_log(&self, operation: &str, user: Option<&str>, result: &str, details: Option<&str>) {
+    pub fn audit_log(
+        &self,
+        operation: &str,
+        user: Option<&str>,
+        result: &str,
+        details: Option<&str>,
+    ) {
         let audit_entry = json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "type": "audit",
@@ -267,7 +300,13 @@ impl LoggingSystem {
     }
 
     /// 记录性能日志
-    pub fn performance_log(&self, operation: &str, duration_ms: u64, success: bool, metadata: Option<&HashMap<String, String>>) {
+    pub fn performance_log(
+        &self,
+        operation: &str,
+        duration_ms: u64,
+        success: bool,
+        metadata: Option<&HashMap<String, String>>,
+    ) {
         let perf_entry = json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "type": "performance",
@@ -301,7 +340,13 @@ impl LoggingSystem {
     }
 
     /// 记录健康状态日志
-    pub fn health_status_log(&self, service_name: &str, status: &str, response_time_ms: u64, details: Option<&str>) {
+    pub fn health_status_log(
+        &self,
+        service_name: &str,
+        status: &str,
+        response_time_ms: u64,
+        details: Option<&str>,
+    ) {
         let health_entry = json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "type": "health_check",
@@ -325,7 +370,10 @@ impl LoggingSystem {
 
         // 更新指标
         if let Some(ref collector) = self.metrics_collector {
-            collector.record_histogram(&format!("health_check_{}_response_time", service_name), response_time_ms as f64);
+            collector.record_histogram(
+                &format!("health_check_{}_response_time", service_name),
+                response_time_ms as f64,
+            );
             collector.increment_counter(&format!("health_check_{}_total", service_name), 1);
             if status == "healthy" {
                 collector.increment_counter(&format!("health_check_{}_success", service_name), 1);
@@ -336,7 +384,13 @@ impl LoggingSystem {
     }
 
     /// 记录通知日志
-    pub fn notification_log(&self, notification_type: &str, recipient: &str, success: bool, error: Option<&str>) {
+    pub fn notification_log(
+        &self,
+        notification_type: &str,
+        recipient: &str,
+        success: bool,
+        error: Option<&str>,
+    ) {
         let notification_entry = json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "type": "notification",
@@ -362,9 +416,11 @@ impl LoggingSystem {
         if let Some(ref collector) = self.metrics_collector {
             collector.increment_counter(&format!("notification_{}_total", notification_type), 1);
             if success {
-                collector.increment_counter(&format!("notification_{}_success", notification_type), 1);
+                collector
+                    .increment_counter(&format!("notification_{}_success", notification_type), 1);
             } else {
-                collector.increment_counter(&format!("notification_{}_failed", notification_type), 1);
+                collector
+                    .increment_counter(&format!("notification_{}_failed", notification_type), 1);
             }
         }
     }

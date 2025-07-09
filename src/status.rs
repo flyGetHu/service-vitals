@@ -3,14 +3,14 @@
 //! 提供服务运行状态的查询和管理功能
 
 use crate::health::{HealthResult, HealthStatus};
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::fs;
-use anyhow::{Context, Result};
 
 /// 服务运行状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +83,7 @@ impl StatusManager {
     /// 更新服务状态
     pub async fn update_service_status(&self, result: &HealthResult) {
         let mut status_map = self.service_status.write().await;
-        
+
         let service_status = ServiceStatus {
             name: result.service_name.clone(),
             url: result.service_url.clone(),
@@ -95,14 +95,14 @@ impl StatusManager {
             error_message: result.error_message.clone(),
             enabled: true, // 假设运行中的服务都是启用的
         };
-        
+
         status_map.insert(result.service_name.clone(), service_status);
     }
 
     /// 添加服务（初始状态）
     pub async fn add_service(&self, name: String, url: String, enabled: bool) {
         let mut status_map = self.service_status.write().await;
-        
+
         let service_status = ServiceStatus {
             name: name.clone(),
             url,
@@ -114,7 +114,7 @@ impl StatusManager {
             error_message: None,
             enabled,
         };
-        
+
         status_map.insert(name, service_status);
     }
 
@@ -134,14 +134,20 @@ impl StatusManager {
     pub async fn get_overall_status(&self) -> OverallStatus {
         let status_map = self.service_status.read().await;
         let last_reload = self.last_config_reload.read().await;
-        
+
         let services: Vec<ServiceStatus> = status_map.values().cloned().collect();
-        
+
         let total_services = services.len();
-        let healthy_services = services.iter().filter(|s| s.enabled && s.status.is_healthy()).count();
-        let unhealthy_services = services.iter().filter(|s| s.enabled && !s.status.is_healthy() && s.status != HealthStatus::Unknown).count();
+        let healthy_services = services
+            .iter()
+            .filter(|s| s.enabled && s.status.is_healthy())
+            .count();
+        let unhealthy_services = services
+            .iter()
+            .filter(|s| s.enabled && !s.status.is_healthy() && s.status != HealthStatus::Unknown)
+            .count();
         let disabled_services = services.iter().filter(|s| !s.enabled).count();
-        
+
         OverallStatus {
             start_time: self.start_time,
             config_path: self.config_path.clone(),
@@ -169,28 +175,23 @@ impl StatusManager {
     /// 保存状态到文件
     pub async fn save_to_file(&self, path: &PathBuf) -> Result<()> {
         let status = self.get_overall_status().await;
-        let json_data = serde_json::to_string_pretty(&status)
-            .context("序列化状态数据失败")?;
+        let json_data = serde_json::to_string_pretty(&status).context("序列化状态数据失败")?;
 
         // 确保目录存在
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .context("创建状态文件目录失败")?;
+            fs::create_dir_all(parent).context("创建状态文件目录失败")?;
         }
 
-        fs::write(path, json_data)
-            .context("写入状态文件失败")?;
+        fs::write(path, json_data).context("写入状态文件失败")?;
 
         Ok(())
     }
 
     /// 从文件加载状态
     pub async fn load_from_file(path: &PathBuf) -> Result<OverallStatus> {
-        let json_data = fs::read_to_string(path)
-            .context("读取状态文件失败")?;
+        let json_data = fs::read_to_string(path).context("读取状态文件失败")?;
 
-        let status: OverallStatus = serde_json::from_str(&json_data)
-            .context("解析状态文件失败")?;
+        let status: OverallStatus = serde_json::from_str(&json_data).context("解析状态文件失败")?;
 
         Ok(status)
     }
@@ -216,7 +217,7 @@ mod tests {
     async fn test_status_manager_creation() {
         let manager = StatusManager::new(PathBuf::from("test.toml"));
         let status = manager.get_overall_status().await;
-        
+
         assert_eq!(status.total_services, 0);
         assert_eq!(status.healthy_services, 0);
         assert_eq!(status.unhealthy_services, 0);
@@ -225,17 +226,19 @@ mod tests {
     #[tokio::test]
     async fn test_add_and_update_service() {
         let manager = StatusManager::new(PathBuf::from("test.toml"));
-        
+
         // 添加服务
-        manager.add_service(
-            "test-service".to_string(),
-            "http://example.com".to_string(),
-            true,
-        ).await;
-        
+        manager
+            .add_service(
+                "test-service".to_string(),
+                "http://example.com".to_string(),
+                true,
+            )
+            .await;
+
         let status = manager.get_overall_status().await;
         assert_eq!(status.total_services, 1);
-        
+
         // 更新服务状态
         let health_result = HealthResult::new(
             "test-service".to_string(),
@@ -245,9 +248,9 @@ mod tests {
         )
         .with_status_code(200)
         .with_response_time(Duration::from_millis(100));
-        
+
         manager.update_service_status(&health_result).await;
-        
+
         let updated_status = manager.get_overall_status().await;
         assert_eq!(updated_status.healthy_services, 1);
     }
@@ -255,12 +258,12 @@ mod tests {
     #[tokio::test]
     async fn test_config_reload_tracking() {
         let manager = StatusManager::new(PathBuf::from("test.toml"));
-        
+
         let status_before = manager.get_overall_status().await;
         assert!(status_before.last_config_reload.is_none());
-        
+
         manager.mark_config_reload().await;
-        
+
         let status_after = manager.get_overall_status().await;
         assert!(status_after.last_config_reload.is_some());
     }

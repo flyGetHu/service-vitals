@@ -151,17 +151,35 @@ impl MessageTemplate for HandlebarsTemplate {
     fn render(&self, context: &TemplateContext) -> Result<String> {
         // 将TemplateContext转换为JSON值
         let mut data = serde_json::Map::new();
-        data.insert("service_name".to_string(), serde_json::Value::String(context.service_name.clone()));
-        data.insert("service_url".to_string(), serde_json::Value::String(context.service_url.clone()));
-        data.insert("response_time".to_string(), serde_json::Value::Number(context.response_time.into()));
-        data.insert("timestamp".to_string(), serde_json::Value::String(context.timestamp.clone()));
+        data.insert(
+            "service_name".to_string(),
+            serde_json::Value::String(context.service_name.clone()),
+        );
+        data.insert(
+            "service_url".to_string(),
+            serde_json::Value::String(context.service_url.clone()),
+        );
+        data.insert(
+            "response_time".to_string(),
+            serde_json::Value::Number(context.response_time.into()),
+        );
+        data.insert(
+            "timestamp".to_string(),
+            serde_json::Value::String(context.timestamp.clone()),
+        );
 
         if let Some(status_code) = context.status_code {
-            data.insert("status_code".to_string(), serde_json::Value::Number(status_code.into()));
+            data.insert(
+                "status_code".to_string(),
+                serde_json::Value::Number(status_code.into()),
+            );
         }
 
         if let Some(ref error_message) = context.error_message {
-            data.insert("error_message".to_string(), serde_json::Value::String(error_message.clone()));
+            data.insert(
+                "error_message".to_string(),
+                serde_json::Value::String(error_message.clone()),
+            );
         }
 
         // 添加自定义字段
@@ -190,7 +208,8 @@ fn format_time_helper(
     _: &mut handlebars::RenderContext,
     out: &mut dyn handlebars::Output,
 ) -> handlebars::HelperResult {
-    let timestamp = h.param(0)
+    let timestamp = h
+        .param(0)
         .and_then(|v| v.value().as_str())
         .ok_or_else(|| handlebars::RenderError::new("时间戳参数无效"))?;
 
@@ -207,7 +226,8 @@ fn status_emoji_helper(
     _: &mut handlebars::RenderContext,
     out: &mut dyn handlebars::Output,
 ) -> handlebars::HelperResult {
-    let is_healthy = h.param(0)
+    let is_healthy = h
+        .param(0)
         .and_then(|v| v.value().as_bool())
         .unwrap_or(false);
 
@@ -274,7 +294,9 @@ pub fn create_default_alert_template() -> Result<Box<dyn MessageTemplate>> {
 
 /// 创建默认的恢复模板
 pub fn create_default_recovery_template() -> Result<Box<dyn MessageTemplate>> {
-    Ok(Box::new(HandlebarsTemplate::new(default_recovery_template())?))
+    Ok(Box::new(HandlebarsTemplate::new(
+        default_recovery_template(),
+    )?))
 }
 
 #[cfg(test)]
