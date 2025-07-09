@@ -59,7 +59,7 @@ impl Default for DaemonConfig {
 impl DaemonConfig {
     /// 创建开发环境配置
     pub fn for_development() -> Self {
-        let config = Self {
+        Self {
             config_path: PathBuf::from("./config.toml"),
             working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             pid_file: Some(PathBuf::from("./service-vitals.pid")),
@@ -67,8 +67,7 @@ impl DaemonConfig {
             user: None,
             group: None,
             ..Default::default()
-        };
-        config
+        }
     }
 }
 

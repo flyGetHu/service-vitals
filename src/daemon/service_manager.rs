@@ -118,62 +118,62 @@ impl ServiceManager {
 
     /// 卸载服务
     pub async fn uninstall_service(&self, service_name: &str) -> Result<()> {
-        info!("开始卸载服务: {}", service_name);
+        info!("开始卸载服务: {service_name}");
 
         // 检查服务是否已安装
         if !self.daemon_manager.is_installed(service_name).await? {
-            info!("服务未安装: {}", service_name);
+            info!("服务未安装: {service_name}");
             return Ok(());
         }
 
         // 执行卸载
         self.daemon_manager.uninstall(service_name).await?;
-        info!("服务卸载完成: {}", service_name);
+        info!("服务卸载完成: {service_name}");
 
         Ok(())
     }
 
     /// 启动服务
     pub async fn start_service(&self, service_name: &str) -> Result<()> {
-        info!("启动服务: {}", service_name);
+        info!("启动服务: {service_name}");
 
         // 检查当前状态
         let current_status = self.daemon_manager.status(service_name).await?;
         if current_status == DaemonStatus::Running {
-            info!("服务已经在运行: {}", service_name);
+            info!("服务已经在运行: {service_name}");
             return Ok(());
         }
 
         // 启动服务
         self.daemon_manager.start(service_name).await?;
-        info!("服务启动完成: {}", service_name);
+        info!("服务启动完成: {service_name}");
 
         Ok(())
     }
 
     /// 停止服务
     pub async fn stop_service(&self, service_name: &str) -> Result<()> {
-        info!("停止服务: {}", service_name);
+        info!("停止服务: {service_name}");
 
         // 检查当前状态
         let current_status = self.daemon_manager.status(service_name).await?;
         if current_status == DaemonStatus::Stopped {
-            info!("服务已经停止: {}", service_name);
+            info!("服务已经停止: {service_name}");
             return Ok(());
         }
 
         // 停止服务
         self.daemon_manager.stop(service_name).await?;
-        info!("服务停止完成: {}", service_name);
+        info!("服务停止完成: {service_name}");
 
         Ok(())
     }
 
     /// 重启服务
     pub async fn restart_service(&self, service_name: &str) -> Result<()> {
-        info!("重启服务: {}", service_name);
+        info!("重启服务: {service_name}");
         self.daemon_manager.restart(service_name).await?;
-        info!("服务重启完成: {}", service_name);
+        info!("服务重启完成: {service_name}");
         Ok(())
     }
 
@@ -198,7 +198,7 @@ impl ServiceManager {
             match self.get_service_status(service_name).await {
                 Ok(info) => services.push(info),
                 Err(e) => {
-                    error!("获取服务状态失败 {}: {}", service_name, e);
+                    error!("获取服务状态失败 {service_name}: {e}");
                     services.push(ServiceInfo {
                         name: service_name.clone(),
                         status: DaemonStatus::Unknown,
@@ -277,7 +277,7 @@ impl ServiceManager {
                 suggestions.push("建议指定专用用户运行服务以提高安全性".to_string());
             }
 
-            if config.user.as_ref().map_or(false, |u| u == "root") {
+            if config.user.as_ref().is_some_and(|u| u == "root") {
                 suggestions.push("不建议使用root用户运行服务".to_string());
             }
         }
