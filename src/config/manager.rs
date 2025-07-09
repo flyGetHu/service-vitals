@@ -16,7 +16,7 @@ use tracing::{debug, error, info, warn};
 #[derive(Debug, Clone)]
 pub enum ConfigDiff {
     /// 服务添加
-    ServiceAdded(ServiceConfig),
+    ServiceAdded(Box<ServiceConfig>),
     /// 服务移除
     ServiceRemoved(String),
     /// 服务修改
@@ -228,7 +228,7 @@ impl ConfigManager {
                 }
                 None => {
                     // 新增服务
-                    diffs.push(ConfigDiff::ServiceAdded((*new_service).clone()));
+                    diffs.push(ConfigDiff::ServiceAdded(Box::new((*new_service).clone())));
                 }
             }
         }

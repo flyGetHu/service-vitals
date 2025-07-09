@@ -86,7 +86,7 @@ impl SimpleTemplate {
 
         // 替换自定义字段
         for (key, value) in &context.custom_fields {
-            let placeholder = format!("{{{{{}}}}}", key);
+            let placeholder = format!("{{{{{key}}}}}");
             let value_str = match value {
                 Value::String(s) => s.clone(),
                 Value::Number(n) => n.to_string(),

@@ -86,8 +86,10 @@ impl FeishuSender {
     /// # 返回
     /// * `Result<Self>` - 发送器实例
     pub fn new(default_webhook_url: Option<String>) -> Result<Self> {
-        let mut config = FeishuConfig::default();
-        config.webhook_url = default_webhook_url;
+        let config = FeishuConfig {
+            webhook_url: default_webhook_url,
+            ..Default::default()
+        };
         Self::new_with_config(config)
     }
 
@@ -205,7 +207,7 @@ impl FeishuSender {
             }
 
             for user_id in &self.config.mention_users {
-                at_text.push_str(&format!("<at id={}></at>", user_id));
+                at_text.push_str(&format!("<at id={user_id}></at>"));
             }
 
             if !at_text.is_empty() {
@@ -344,7 +346,7 @@ impl FeishuSender {
 
         type HmacSha256 = Hmac<Sha256>;
 
-        let string_to_sign = format!("{}\n{}", timestamp, secret);
+        let string_to_sign = format!("{timestamp}\n{secret}");
         let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
             .map_err(|e| anyhow::anyhow!("创建HMAC失败: {}", e))?;
 

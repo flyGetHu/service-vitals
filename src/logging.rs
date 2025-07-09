@@ -102,7 +102,15 @@ impl MetricsCollector {
             last_collection: Arc::new(Mutex::new(Instant::now())),
         }
     }
+}
 
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MetricsCollector {
     /// 增加计数器
     pub fn increment_counter(&self, name: &str, value: u64) {
         let mut metrics = self.metrics.lock().unwrap();
@@ -222,7 +230,7 @@ impl LoggingSystem {
                     "file": record.file(),
                     "line": record.line(),
                 });
-                writeln!(buf, "{}", json_log)
+                writeln!(buf, "{json_log}")
             });
         } else {
             builder.format(|buf, record| {
@@ -259,7 +267,7 @@ impl LoggingSystem {
         }
 
         log::info!("日志系统初始化完成");
-        log::debug!("日志配置: {:?}", config);
+        log::debug!("日志配置: {config:?}");
 
         Ok(system)
     }
@@ -287,7 +295,7 @@ impl LoggingSystem {
         });
 
         if self.config.json_format {
-            log::info!("{}", audit_entry);
+            log::info!("{audit_entry}");
         } else {
             log::info!(
                 "AUDIT: {} by {} - {} ({})",
@@ -317,7 +325,7 @@ impl LoggingSystem {
         });
 
         if self.config.json_format {
-            log::info!("{}", perf_entry);
+            log::info!("{perf_entry}");
         } else {
             log::info!(
                 "PERF: {} - {}ms ({})",
@@ -329,12 +337,12 @@ impl LoggingSystem {
 
         // 更新指标
         if let Some(ref collector) = self.metrics_collector {
-            collector.record_histogram(&format!("{}_duration_ms", operation), duration_ms as f64);
-            collector.increment_counter(&format!("{}_total", operation), 1);
+            collector.record_histogram(&format!("{operation}_duration_ms"), duration_ms as f64);
+            collector.increment_counter(&format!("{operation}_total"), 1);
             if success {
-                collector.increment_counter(&format!("{}_success", operation), 1);
+                collector.increment_counter(&format!("{operation}_success"), 1);
             } else {
-                collector.increment_counter(&format!("{}_failed", operation), 1);
+                collector.increment_counter(&format!("{operation}_failed"), 1);
             }
         }
     }
@@ -357,7 +365,7 @@ impl LoggingSystem {
         });
 
         if self.config.json_format {
-            log::info!("{}", health_entry);
+            log::info!("{health_entry}");
         } else {
             log::info!(
                 "HEALTH: {} - {} ({}ms) {}",
@@ -371,14 +379,14 @@ impl LoggingSystem {
         // 更新指标
         if let Some(ref collector) = self.metrics_collector {
             collector.record_histogram(
-                &format!("health_check_{}_response_time", service_name),
+                &format!("health_check_{service_name}_response_time"),
                 response_time_ms as f64,
             );
-            collector.increment_counter(&format!("health_check_{}_total", service_name), 1);
+            collector.increment_counter(&format!("health_check_{service_name}_total"), 1);
             if status == "healthy" {
-                collector.increment_counter(&format!("health_check_{}_success", service_name), 1);
+                collector.increment_counter(&format!("health_check_{service_name}_success"), 1);
             } else {
-                collector.increment_counter(&format!("health_check_{}_failed", service_name), 1);
+                collector.increment_counter(&format!("health_check_{service_name}_failed"), 1);
             }
         }
     }
@@ -401,7 +409,7 @@ impl LoggingSystem {
         });
 
         if self.config.json_format {
-            log::info!("{}", notification_entry);
+            log::info!("{notification_entry}");
         } else {
             log::info!(
                 "NOTIFICATION: {} to {} - {} {}",
@@ -414,13 +422,13 @@ impl LoggingSystem {
 
         // 更新指标
         if let Some(ref collector) = self.metrics_collector {
-            collector.increment_counter(&format!("notification_{}_total", notification_type), 1);
+            collector.increment_counter(&format!("notification_{notification_type}_total"), 1);
             if success {
                 collector
-                    .increment_counter(&format!("notification_{}_success", notification_type), 1);
+                    .increment_counter(&format!("notification_{notification_type}_success"), 1);
             } else {
                 collector
-                    .increment_counter(&format!("notification_{}_failed", notification_type), 1);
+                    .increment_counter(&format!("notification_{notification_type}_failed"), 1);
             }
         }
     }
@@ -456,7 +464,7 @@ impl LoggingSystem {
             }).collect::<HashMap<_, _>>()
         });
 
-        log::info!("{}", metrics_entry);
+        log::info!("{metrics_entry}");
 
         // 重置计数器类型的指标
         collector.reset();
