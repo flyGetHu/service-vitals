@@ -1,0 +1,72 @@
+name: Build on Tag Push
+
+# 触发条件：当推送tag时自动执行
+on:
+  push:
+    tags:
+      - 'v*'  # 匹配以 'v' 开头的所有tag，如 v1.0.0, v1.2.3-beta
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build for Ubuntu Linux
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          # 缓存键包含Cargo.lock的哈希值
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: Check code formatting
+        run: cargo fmt -- --check
+        
+      - name: Run Clippy lints
+        run: cargo clippy -- -D warnings
+        
+      - name: Run tests
+        run: cargo test --verbose
+        
+      - name: Build release binary
+        run: cargo build --release --verbose
+        
+      - name: Create build info
+        run: |
+          echo "Build completed at: $(date)" > build-info.txt
+          echo "Tag: ${{ github.ref_name }}" >> build-info.txt
+          echo "Commit: ${{ github.sha }}" >> build-info.txt
+          echo "Runner OS: ${{ runner.os }}" >> build-info.txt
+          
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-vitals-${{ github.ref_name }}-linux-x86_64
+          path: |
+            target/release/service-vitals
+            build-info.txt
+          retention-days: 30
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            target/release/service-vitals
+            build-info.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
