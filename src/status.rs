@@ -87,7 +87,7 @@ impl StatusManager {
         let service_status = ServiceStatus {
             name: result.service_name.clone(),
             url: result.service_url.clone(),
-            status: result.status.clone(),
+            status: result.status,
             last_check: Some(result.timestamp),
             status_code: result.status_code,
             response_time_ms: Some(result.response_time.as_millis() as u64),

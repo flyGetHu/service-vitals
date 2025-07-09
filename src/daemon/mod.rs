@@ -59,14 +59,15 @@ impl Default for DaemonConfig {
 impl DaemonConfig {
     /// 创建开发环境配置
     pub fn for_development() -> Self {
-        let mut config = Self::default();
-        config.config_path = PathBuf::from("./config.toml");
-        config.working_directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        config.pid_file = Some(PathBuf::from("./service-vitals.pid"));
-        config.log_file = Some(PathBuf::from("./service-vitals.log"));
-        config.user = None;
-        config.group = None;
-        config
+        Self {
+            config_path: PathBuf::from("./config.toml"),
+            working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            pid_file: Some(PathBuf::from("./service-vitals.pid")),
+            log_file: Some(PathBuf::from("./service-vitals.log")),
+            user: None,
+            group: None,
+            ..Default::default()
+        }
     }
 }
 
@@ -126,6 +127,12 @@ impl PlatformDaemonManager {
     }
 }
 
+impl Default for PlatformDaemonManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(unix)]
 #[async_trait]
 impl DaemonManager for PlatformDaemonManager {
@@ -171,6 +178,7 @@ pub struct DaemonRuntime {
     /// 关闭信号发送器
     shutdown_tx: broadcast::Sender<()>,
     /// 关闭信号接收器
+    #[allow(dead_code)]
     shutdown_rx: broadcast::Receiver<()>,
 }
 
@@ -243,7 +251,7 @@ impl DaemonRuntime {
         // 写入当前进程ID
         let pid = std::process::id();
         let mut file = fs::File::create(pid_file)?;
-        writeln!(file, "{}", pid)?;
+        writeln!(file, "{pid}")?;
 
         Ok(())
     }

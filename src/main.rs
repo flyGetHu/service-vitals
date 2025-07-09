@@ -29,10 +29,12 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // 初始化日志系统
-    let mut log_config = LogConfig::default();
-    log_config.level = args.log_level.clone().into();
-    log_config.console = true;
-    log_config.json_format = false;
+    let log_config = LogConfig {
+        level: args.log_level.clone().into(),
+        console: true,
+        json_format: false,
+        ..Default::default()
+    };
 
     let _logging_system = LoggingSystem::setup_logging(log_config).context("初始化日志系统失败")?;
 

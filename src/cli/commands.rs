@@ -185,9 +185,7 @@ impl Command for ValidateCommand {
             verbose,
         } = &args.command
         {
-            let config_file = config_path
-                .as_ref()
-                .map(|p| p.clone())
+            let config_file = config_path.clone()
                 .unwrap_or_else(|| args.get_config_path());
 
             self.validate_config_file(&config_file, *verbose).await
@@ -265,7 +263,7 @@ impl CheckCommand {
     ) -> Result<()> {
         // 加载配置
         let loader = TomlConfigLoader::new(true);
-        let config = loader.load_from_file(&args.get_config_path()).await?;
+        let config = loader.load_from_file(args.get_config_path()).await?;
 
         // 创建健康检测器
         let checker = HttpHealthChecker::new(
@@ -287,7 +285,7 @@ impl CheckCommand {
 
         if services_to_check.is_empty() {
             if let Some(name) = service_name {
-                eprintln!("未找到名为 '{}' 的启用服务", name);
+                eprintln!("未找到名为 '{name}' 的启用服务");
             } else {
                 eprintln!("未找到任何启用的服务");
             }
@@ -336,11 +334,11 @@ impl CheckCommand {
                     );
 
                     if let Some(error) = &health_result.error_message {
-                        println!("  错误: {}", error);
+                        println!("  错误: {error}");
                     }
                 }
                 Err(e) => {
-                    println!("✗ 检测失败: {}", e);
+                    println!("✗ 检测失败: {e}");
                 }
             }
         }
@@ -507,7 +505,7 @@ impl StatusCommand {
                     println!("unhealthy_services: {}", status.unhealthy_services);
                     println!("disabled_services: {}", status.disabled_services);
                     if let Some(reload_time) = status.last_config_reload {
-                        println!("last_config_reload: {}", reload_time);
+                        println!("last_config_reload: {reload_time}");
                     }
                     println!("services:");
                     for service in &status.services {
@@ -516,13 +514,13 @@ impl StatusCommand {
                         println!("    status: {:?}", service.status);
                         println!("    enabled: {}", service.enabled);
                         if let Some(last_check) = service.last_check {
-                            println!("    last_check: {}", last_check);
+                            println!("    last_check: {last_check}");
                         }
                         if let Some(status_code) = service.status_code {
-                            println!("    status_code: {}", status_code);
+                            println!("    status_code: {status_code}");
                         }
                         if let Some(response_time) = service.response_time_ms {
-                            println!("    response_time_ms: {}", response_time);
+                            println!("    response_time_ms: {response_time}");
                         }
                     }
                 } else {
@@ -590,7 +588,7 @@ impl StatusCommand {
 
                 let response_time_str = service
                     .response_time_ms
-                    .map(|t| format!("{}ms", t))
+                    .map(|t| format!("{t}ms"))
                     .unwrap_or_else(|| "N/A".to_string());
 
                 let last_check_str = service
@@ -638,7 +636,7 @@ impl StatusCommand {
 /// 截断字符串到指定长度
 fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
-        format!("{:<width$}", s, width = max_len)
+        format!("{s:<max_len$}")
     } else {
         format!("{}...", &s[..max_len.saturating_sub(3)])
     }
@@ -661,21 +659,22 @@ impl Command for InstallCommand {
             let service_manager = ServiceManager::new();
 
             // 创建守护进程配置
-            let mut config = DaemonConfig::default();
-
-            config.service_name = service_name.clone();
-            config.display_name = display_name.clone();
-            config.description = description.clone();
-            config.config_path = args.get_config_path();
-            config.user = user.clone();
-            config.group = group.clone();
+            let config = DaemonConfig {
+                service_name: service_name.clone(),
+                display_name: display_name.clone(),
+                description: description.clone(),
+                config_path: args.get_config_path(),
+                user: user.clone(),
+                group: group.clone(),
+                ..Default::default()
+            };
 
             // 验证配置
             let warnings = service_manager.validate_config(&config)?;
             if !warnings.is_empty() {
                 println!("⚠️  配置警告:");
                 for warning in &warnings {
-                    println!("   - {}", warning);
+                    println!("   - {warning}");
                 }
                 println!();
             }
@@ -685,13 +684,13 @@ impl Command for InstallCommand {
             if !suggestions.is_empty() {
                 println!("💡 配置建议:");
                 for suggestion in &suggestions {
-                    println!("   - {}", suggestion);
+                    println!("   - {suggestion}");
                 }
                 println!();
             }
 
             // 安装服务
-            println!("🔧 正在安装服务: {}", service_name);
+            println!("🔧 正在安装服务: {service_name}");
             service_manager.install_service(&config).await?;
             println!("✅ 服务安装成功!");
 
@@ -713,7 +712,7 @@ impl Command for UninstallCommand {
         if let Commands::Uninstall { service_name } = &args.command {
             let service_manager = ServiceManager::new();
 
-            println!("🗑️  正在卸载服务: {}", service_name);
+            println!("🗑️  正在卸载服务: {service_name}");
             service_manager.uninstall_service(service_name).await?;
             println!("✅ 服务卸载成功!");
         }
@@ -730,7 +729,7 @@ impl Command for StartServiceCommand {
         if let Commands::StartService { service_name } = &args.command {
             let service_manager = ServiceManager::new();
 
-            println!("▶️  正在启动服务: {}", service_name);
+            println!("▶️  正在启动服务: {service_name}");
             service_manager.start_service(service_name).await?;
             println!("✅ 服务启动成功!");
         }
@@ -747,7 +746,7 @@ impl Command for StopServiceCommand {
         if let Commands::StopService { service_name } = &args.command {
             let service_manager = ServiceManager::new();
 
-            println!("⏹️  正在停止服务: {}", service_name);
+            println!("⏹️  正在停止服务: {service_name}");
             service_manager.stop_service(service_name).await?;
             println!("✅ 服务停止成功!");
         }
@@ -764,7 +763,7 @@ impl Command for RestartServiceCommand {
         if let Commands::RestartService { service_name } = &args.command {
             let service_manager = ServiceManager::new();
 
-            println!("🔄 正在重启服务: {}", service_name);
+            println!("🔄 正在重启服务: {service_name}");
             service_manager.restart_service(service_name).await?;
             println!("✅ 服务重启成功!");
         }
@@ -817,7 +816,7 @@ impl Command for ServiceStatusCommand {
                         crate::daemon::DaemonStatus::Stopping => "⏹️ 停止中",
                         crate::daemon::DaemonStatus::Unknown => "❓ 未知",
                     };
-                    println!("运行状态: {}", status_display);
+                    println!("运行状态: {status_display}");
                 }
             }
 
@@ -882,7 +881,7 @@ impl TestNotificationCommand {
     async fn test_feishu_notification(&self, args: &Args, message: &str) -> Result<()> {
         // 加载配置
         let loader = TomlConfigLoader::new(true);
-        let config = loader.load_from_file(&args.get_config_path()).await?;
+        let config = loader.load_from_file(args.get_config_path()).await?;
 
         // 检查是否配置了飞书webhook
         let webhook_url = match config.global.default_feishu_webhook_url {
@@ -894,7 +893,7 @@ impl TestNotificationCommand {
             }
         };
 
-        println!("🔗 使用webhook URL: {}", webhook_url);
+        println!("🔗 使用webhook URL: {webhook_url}");
 
         // 创建飞书发送器
         let sender = FeishuSender::new(Some(webhook_url))?;
@@ -920,7 +919,7 @@ impl TestNotificationCommand {
                 println!("请检查您的飞书群组是否收到测试消息。");
             }
             Err(e) => {
-                println!("❌ 测试消息发送失败: {}", e);
+                println!("❌ 测试消息发送失败: {e}");
                 println!("请检查：");
                 println!("  1. webhook URL是否正确");
                 println!("  2. 网络连接是否正常");

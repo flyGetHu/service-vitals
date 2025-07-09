@@ -5,7 +5,7 @@
 use crate::config::types::{validate_config, Config};
 use crate::error::{ConfigError, Result};
 use async_trait::async_trait;
-use log::error;
+
 use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
@@ -47,6 +47,7 @@ pub struct TomlConfigLoader {
     /// 是否启用环境变量替换
     enable_env_substitution: bool,
     /// 环境变量缓存
+    #[allow(dead_code)]
     env_cache: HashMap<String, String>,
 }
 
@@ -79,7 +80,7 @@ impl TomlConfigLoader {
 
         // 匹配 ${VAR_NAME} 格式的环境变量
         let env_var_regex = Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-            .map_err(|e| ConfigError::ParseError(format!("正则表达式错误: {}", e)))?;
+            .map_err(|e| ConfigError::ParseError(format!("正则表达式错误: {e}")))?;
 
         let mut result = content.to_string();
 
@@ -116,7 +117,7 @@ impl TomlConfigLoader {
 
         // 解析TOML
         let config: Config = toml::from_str(&processed_content)
-            .map_err(|e| ConfigError::ParseError(format!("TOML解析失败: {}", e)))?;
+            .map_err(|e| ConfigError::ParseError(format!("TOML解析失败: {e}")))?;
 
         Ok(config)
     }
@@ -138,7 +139,7 @@ impl ConfigLoader for TomlConfigLoader {
         // 读取文件内容
         let content = tokio::fs::read_to_string(path)
             .await
-            .map_err(|e| ConfigError::ParseError(format!("读取文件失败: {}", e)))?;
+            .map_err(|e| ConfigError::ParseError(format!("读取文件失败: {e}")))?;
 
         // 解析配置
         let config = self.parse_toml(&content)?;

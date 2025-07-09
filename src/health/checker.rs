@@ -74,7 +74,7 @@ impl HttpHealthChecker {
             .timeout(timeout)
             .user_agent(format!("{}/{}", crate::APP_NAME, crate::VERSION))
             .build()
-            .map_err(|e| HealthCheckError::RequestError(e))?;
+            .map_err(HealthCheckError::RequestError)?;
 
         Ok(Self {
             client,

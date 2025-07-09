@@ -362,8 +362,8 @@ impl Args {
             match crate::config::loader::get_default_config_path() {
                 Ok(path) => path,
                 Err(e) => {
-                    error!("获取默认配置文件路径失败: {}", e);
-                    panic!("获取默认配置文件路径失败: {}", e);
+                    error!("获取默认配置文件路径失败: {e}");
+                    panic!("获取默认配置文件路径失败: {e}");
                 }
             }
         }

@@ -245,7 +245,7 @@ impl std::fmt::Display for ContextualError {
         )?;
 
         if let Some(ref service_name) = self.context.service_name {
-            write!(f, " (service: {})", service_name)?;
+            write!(f, " (service: {service_name})")?;
         }
 
         if !self.context.metadata.is_empty() {
