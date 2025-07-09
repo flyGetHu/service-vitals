@@ -5,7 +5,7 @@
 use crate::config::types::{validate_config, Config};
 use crate::error::{ConfigError, Result};
 use async_trait::async_trait;
-use log::error;
+// use log::error; // 暂时注释掉未使用的导入
 use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;

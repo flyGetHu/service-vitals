@@ -186,8 +186,7 @@ impl Command for ValidateCommand {
         } = &args.command
         {
             let config_file = config_path
-                .as_ref()
-                .map(|p| p.clone())
+                .clone()
                 .unwrap_or_else(|| args.get_config_path());
 
             self.validate_config_file(&config_file, *verbose).await
@@ -265,7 +264,7 @@ impl CheckCommand {
     ) -> Result<()> {
         // 加载配置
         let loader = TomlConfigLoader::new(true);
-        let config = loader.load_from_file(&args.get_config_path()).await?;
+        let config = loader.load_from_file(args.get_config_path()).await?;
 
         // 创建健康检测器
         let checker = HttpHealthChecker::new(
@@ -882,7 +881,7 @@ impl TestNotificationCommand {
     async fn test_feishu_notification(&self, args: &Args, message: &str) -> Result<()> {
         // 加载配置
         let loader = TomlConfigLoader::new(true);
-        let config = loader.load_from_file(&args.get_config_path()).await?;
+        let config = loader.load_from_file(args.get_config_path()).await?;
 
         // 检查是否配置了飞书webhook
         let webhook_url = match config.global.default_feishu_webhook_url {
