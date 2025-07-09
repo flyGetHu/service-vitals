@@ -820,6 +820,17 @@ impl Command for ServiceStatusCommand {
                     println!("运行状态: {}", status_display);
                 }
             }
+
+            let status_file = StatusManager::get_default_status_file_path();
+            // 尝试从状态文件加载状态
+            match StatusManager::load_from_file(&status_file).await {
+                Ok(status) => {
+                    println!("{}", serde_json::to_string_pretty(&status)?);
+                }
+                Err(_) => {
+                    println!("❌ 服务未运行或状态文件不存在");
+                }
+            }
         }
         Ok(())
     }
