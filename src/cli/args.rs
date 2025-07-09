@@ -3,6 +3,7 @@
 //! 使用clap定义应用程序的命令行接口
 
 use clap::{Parser, Subcommand, ValueEnum};
+use log::error;
 use std::path::PathBuf;
 
 /// Service Vitals - 跨平台服务健康监控工具
@@ -355,9 +356,17 @@ impl Args {
 
     /// 获取配置文件路径
     pub fn get_config_path(&self) -> PathBuf {
-        self.config
-            .clone()
-            .unwrap_or_else(|| crate::config::loader::get_default_config_path())
+        if let Some(config) = self.config.clone() {
+            config
+        } else {
+            match crate::config::loader::get_default_config_path() {
+                Ok(path) => path,
+                Err(e) => {
+                    error!("获取默认配置文件路径失败: {}", e);
+                    panic!("获取默认配置文件路径失败: {}", e);
+                }
+            }
+        }
     }
 
     /// 是否启用详细输出

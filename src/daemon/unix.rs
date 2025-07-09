@@ -5,7 +5,7 @@
 use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus};
 use crate::error::{Result, ServiceVitalsError};
 use async_trait::async_trait;
-use log::{info, warn, error, debug};
+use log::{debug, error, info, warn};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -22,7 +22,7 @@ impl UnixDaemonManager {
     pub fn new() -> Self {
         let use_systemd = Self::is_systemd_available();
         debug!("Unix守护进程管理器初始化，使用systemd: {}", use_systemd);
-        
+
         Self { use_systemd }
     }
 
@@ -46,7 +46,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart={} start --config {}
+ExecStart={} --config {} start 
 ExecReload=/bin/kill -USR1 $MAINPID
 Restart=always
 RestartSec=5
@@ -67,7 +67,18 @@ TimeoutStopSec=30
         }
 
         // 添加工作目录
-        service_content.push_str(&format!("WorkingDirectory={}\n", config.working_directory.display()));
+        let working_directory = config.working_directory.clone();
+        if !working_directory.is_dir() {
+            if let Err(e) = fs::create_dir_all(&working_directory) {
+                error!("创建工作目录失败: {}", e);
+            }
+            info!("创建工作目录: {}", working_directory.display());
+        }
+
+        service_content.push_str(&format!(
+            "WorkingDirectory={}\n",
+            working_directory.display()
+        ));
 
         // 添加PID文件
         if let Some(ref pid_file) = config.pid_file {
@@ -111,10 +122,7 @@ WantedBy=multi-user.target
 
     /// 执行systemctl命令
     async fn run_systemctl(&self, args: &[&str]) -> Result<String> {
-        let output = AsyncCommand::new("systemctl")
-            .args(args)
-            .output()
-            .await?;
+        let output = AsyncCommand::new("systemctl").args(args).output().await?;
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -137,9 +145,7 @@ WantedBy=multi-user.target
             Ok(pid_str) => {
                 if let Ok(pid) = pid_str.trim().parse::<i32>() {
                     // 检查进程是否存在
-                    unsafe {
-                        libc::kill(pid, 0) == 0
-                    }
+                    unsafe { libc::kill(pid, 0) == 0 }
                 } else {
                     false
                 }
@@ -181,12 +187,13 @@ impl DaemonManager for UnixDaemonManager {
             info!("systemd配置已重新加载");
 
             // 启用服务
-            self.run_systemctl(&["enable", &config.service_name]).await?;
+            self.run_systemctl(&["enable", &config.service_name])
+                .await?;
             info!("服务已启用: {}", config.service_name);
         } else {
             // 传统守护进程安装
             warn!("systemd不可用，使用传统守护进程模式");
-            
+
             // 创建必要的目录
             if let Some(parent) = config.working_directory.parent() {
                 fs::create_dir_all(parent)?;
@@ -325,7 +332,7 @@ mod tests {
         let manager = UnixDaemonManager::new();
         let config = DaemonConfig::default();
         let service_content = manager.generate_systemd_service(&config);
-        
+
         assert!(service_content.contains("[Unit]"));
         assert!(service_content.contains("[Service]"));
         assert!(service_content.contains("[Install]"));
@@ -336,6 +343,9 @@ mod tests {
     fn test_systemd_service_path() {
         let manager = UnixDaemonManager::new();
         let path = manager.get_systemd_service_path("test-service");
-        assert_eq!(path, PathBuf::from("/etc/systemd/system/test-service.service"));
+        assert_eq!(
+            path,
+            PathBuf::from("/etc/systemd/system/test-service.service")
+        );
     }
 }

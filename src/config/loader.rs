@@ -5,6 +5,7 @@
 use crate::config::types::{validate_config, Config};
 use crate::error::{ConfigError, Result};
 use async_trait::async_trait;
+use log::error;
 use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
@@ -169,29 +170,23 @@ impl ConfigLoader for TomlConfigLoader {
 }
 
 /// 获取默认配置文件路径
-pub fn get_default_config_path() -> std::path::PathBuf {
-    #[cfg(unix)]
-    {
-        // Linux/macOS: ~/.config/service-vitals/config.toml 或 当前目录/config.toml
-        // 先检测当前目录是否存在config.toml，不存在则检测~/.config/service-vitals/config.toml
-        if std::path::Path::new("config.toml").exists() {
-            std::path::PathBuf::from("config.toml")
-        } else {
-            dirs::config_dir()
-                .map(|config_dir| config_dir.join("service-vitals").join("config.toml"))
-                .unwrap_or_else(|| std::path::PathBuf::from("config.toml"))
-        }
-    }
-
-    #[cfg(not(unix))]
-    {
-        // Windows: %APPDATA%\service-vitals\config.toml
+pub fn get_default_config_path() -> Result<std::path::PathBuf> {
+    // 先检测当前目录是否存在config.toml，不存在则检测~/.config/service-vitals/config.toml
+    let mut path = std::path::PathBuf::from("config.toml");
+    if path.exists() {
+        return Ok(path);
+    } else {
         if let Some(config_dir) = dirs::config_dir() {
-            config_dir.join("service-vitals").join("config.toml")
-        } else {
-            std::path::PathBuf::from("config.toml")
+            path = config_dir.join("service-vitals").join("config.toml");
+        }
+        if path.exists() {
+            return Ok(path);
         }
     }
+    Err(ConfigError::FileNotFound {
+        path: "./config.toml 或 ~/.config/service-vitals/config.toml".to_string(),
+    }
+    .into())
 }
 
 #[cfg(test)]
@@ -316,7 +311,7 @@ expected_status_codes = [200]
 
     #[test]
     fn test_get_default_config_path() {
-        let path = get_default_config_path();
+        let path = get_default_config_path().unwrap();
         assert!(path.is_absolute());
         assert!(path.to_string_lossy().contains("config.toml"));
 
