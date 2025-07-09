@@ -36,6 +36,13 @@ jobs:
       - name: Run Clippy lints
         run: cargo clippy -- -W clippy::all -A clippy::too_many_arguments -A clippy::new_without_default -A clippy::field_reassign_with_default -A clippy::derivable_impls -A clippy::large_enum_variant -A clippy::for_kv_map -A clippy::unnecessary_map_or -A clippy::needless_borrows_for_generic_args -A clippy::redundant_closure -A clippy::clone_on_copy -A clippy::unnecessary_lazy_evaluations -A dead_code -A unused_variables
 
+      - name: Create temporary config for tests
+        run: |
+          echo '[[services]]
+          name = "test-service"
+          url = "https://httpbin.org/status/200"
+          enabled = true' > config.toml
+
       - name: Run tests
         run: cargo test --verbose
 
