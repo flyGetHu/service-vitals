@@ -29,7 +29,7 @@ pub async fn setup_signal_handlers(shutdown_tx: broadcast::Sender<()>) -> Result
 async fn setup_unix_signals(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
     use futures::stream::StreamExt;
 
-    let signals = Signals::new(&[SIGINT, SIGTERM, SIGUSR1])?;
+    let signals = Signals::new([SIGINT, SIGTERM, SIGUSR1])?;
     let handle = signals.handle();
 
     // Clone the sender before moving it
@@ -41,14 +41,14 @@ async fn setup_unix_signals(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
                 SIGINT => {
                     info!("接收到 SIGINT 信号，开始优雅关闭...");
                     if let Err(e) = shutdown_tx_signals.send(()) {
-                        error!("发送关闭信号失败: {}", e);
+                        error!("发送关闭信号失败: {e}");
                     }
                     break;
                 }
                 SIGTERM => {
                     info!("接收到 SIGTERM 信号，开始优雅关闭...");
                     if let Err(e) = shutdown_tx_signals.send(()) {
-                        error!("发送关闭信号失败: {}", e);
+                        error!("发送关闭信号失败: {e}");
                     }
                     break;
                 }
@@ -57,7 +57,7 @@ async fn setup_unix_signals(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
                     // TODO: 实现配置重载逻辑
                 }
                 _ => {
-                    warn!("接收到未处理的信号: {}", signal);
+                    warn!("接收到未处理的信号: {signal}");
                 }
             }
         }
@@ -73,7 +73,7 @@ async fn setup_unix_signals(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
             .expect("Failed to listen for ctrl_c");
         info!("接收到 Ctrl+C，开始优雅关闭...");
         if let Err(e) = shutdown_tx_ctrl_c.send(()) {
-            error!("发送关闭信号失败: {}", e);
+            error!("发送关闭信号失败: {e}");
         }
         handle.close();
     });
@@ -88,7 +88,7 @@ pub async fn wait_for_shutdown(mut shutdown_rx: broadcast::Receiver<()>) {
             info!("接收到关闭信号，开始清理资源...");
         }
         Err(e) => {
-            error!("等待关闭信号时发生错误: {}", e);
+            error!("等待关闭信号时发生错误: {e}");
         }
     }
 }
@@ -120,7 +120,7 @@ impl GracefulShutdown {
                 true
             }
             Ok(Err(e)) => {
-                error!("接收关闭信号时发生错误: {}", e);
+                error!("接收关闭信号时发生错误: {e}");
                 false
             }
             Err(_) => {
@@ -144,7 +144,7 @@ impl GracefulShutdown {
 
             // 执行清理函数
             if let Err(e) = cleanup_fn().await {
-                error!("清理操作失败: {}", e);
+                error!("清理操作失败: {e}");
                 return Err(e);
             }
 

@@ -17,7 +17,7 @@ use tokio::time::{interval, Instant};
 use tracing::{debug, error, info, warn};
 
 /// 服务通知状态
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ServiceNotificationState {
     /// 上次健康状态
     pub last_health_status: Option<HealthStatus>,
@@ -29,18 +29,6 @@ pub struct ServiceNotificationState {
     pub notification_count: u32,
     /// 是否已发送告警
     pub alert_sent: bool,
-}
-
-impl Default for ServiceNotificationState {
-    fn default() -> Self {
-        Self {
-            last_health_status: None,
-            last_notification_time: None,
-            consecutive_failures: 0,
-            notification_count: 0,
-            alert_sent: false,
-        }
-    }
 }
 
 /// 调度器状态
@@ -169,7 +157,7 @@ impl TaskScheduler {
         notifier: &Option<Arc<dyn NotificationSender>>,
         status_arc: &Arc<RwLock<SchedulerStatus>>,
     ) -> Result<()> {
-        let current_status = result.status.clone();
+        let current_status = result.status;
         let now = Instant::now();
 
         // 更新连续失败计数
@@ -395,6 +383,7 @@ impl TaskScheduler {
     }
 
     /// 处理配置更新
+    #[allow(clippy::too_many_arguments)]
     async fn handle_config_update(
         update: ConfigUpdateNotification,
         tasks: &Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
@@ -421,7 +410,7 @@ impl TaskScheduler {
                 ConfigDiff::ServiceAdded(service) => {
                     info!("添加新服务: {}", service.name);
                     if let Err(e) = TaskScheduler::start_new_service_task(
-                        service.clone(),
+                        (**service).clone(),
                         tasks,
                         checker,
                         notifier,
@@ -451,7 +440,7 @@ impl TaskScheduler {
                         .await;
                     // 启动新任务
                     if let Err(e) = TaskScheduler::start_new_service_task(
-                        new.clone(),
+                        (**new).clone(),
                         tasks,
                         checker,
                         notifier,
@@ -481,12 +470,13 @@ impl TaskScheduler {
     }
 
     /// 启动新服务任务
+    #[allow(clippy::too_many_arguments)]
     async fn start_new_service_task(
         service: ServiceConfig,
         tasks: &Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
         checker: &Arc<dyn HealthChecker>,
         notifier: &Option<Arc<dyn NotificationSender>>,
-        config: &Arc<RwLock<GlobalConfig>>,
+        _config: &Arc<RwLock<GlobalConfig>>,
         semaphore: &Arc<Semaphore>,
         notification_states: &Arc<RwLock<HashMap<String, ServiceNotificationState>>>,
         status: &Arc<RwLock<SchedulerStatus>>,
@@ -500,7 +490,7 @@ impl TaskScheduler {
         let status_arc = Arc::clone(status);
 
         // 计算检测间隔
-        let check_interval = service.check_interval_seconds.unwrap_or_else(|| {
+        let check_interval = service.check_interval_seconds.unwrap_or({
             // 从全局配置获取默认值
             60 // 默认60秒，实际应该从config中读取
         });
@@ -617,7 +607,7 @@ impl Scheduler for TaskScheduler {
                 let service_name = service.name.clone();
                 self.start_service_task(service)
                     .await
-                    .with_context(|| format!("启动服务任务失败: {}", service_name))?;
+                    .with_context(|| format!("启动服务任务失败: {service_name}"))?;
             } else {
                 debug!("跳过已禁用的服务: {}", service.name);
             }

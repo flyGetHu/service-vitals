@@ -17,11 +17,17 @@ pub struct UnixDaemonManager {
     use_systemd: bool,
 }
 
+impl Default for UnixDaemonManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UnixDaemonManager {
     /// 创建新的Unix守护进程管理器
     pub fn new() -> Self {
         let use_systemd = Self::is_systemd_available();
-        debug!("Unix守护进程管理器初始化，使用systemd: {}", use_systemd);
+        debug!("Unix守护进程管理器初始化，使用systemd: {use_systemd}");
 
         Self { use_systemd }
     }
@@ -60,17 +66,17 @@ TimeoutStopSec=30
 
         // 添加用户和组配置
         if let Some(ref user) = config.user {
-            service_content.push_str(&format!("User={}\n", user));
+            service_content.push_str(&format!("User={user}\n"));
         }
         if let Some(ref group) = config.group {
-            service_content.push_str(&format!("Group={}\n", group));
+            service_content.push_str(&format!("Group={group}\n"));
         }
 
         // 添加工作目录
         let working_directory = config.working_directory.clone();
         if !working_directory.is_dir() {
             if let Err(e) = fs::create_dir_all(&working_directory) {
-                error!("创建工作目录失败: {}", e);
+                error!("创建工作目录失败: {e}");
             }
             info!("创建工作目录: {}", working_directory.display());
         }
@@ -117,7 +123,7 @@ WantedBy=multi-user.target
 
     /// 获取systemd服务文件路径
     fn get_systemd_service_path(&self, service_name: &str) -> PathBuf {
-        PathBuf::from(format!("/etc/systemd/system/{}.service", service_name))
+        PathBuf::from(format!("/etc/systemd/system/{service_name}.service"))
     }
 
     /// 执行systemctl命令
@@ -129,13 +135,13 @@ WantedBy=multi-user.target
         } else {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             Err(ServiceVitalsError::DaemonError(format!(
-                "systemctl命令执行失败: {}",
-                error_msg
+                "systemctl命令执行失败: {error_msg}"
             )))
         }
     }
 
     /// 检查进程是否运行（通过PID文件）
+    #[allow(dead_code)]
     fn is_process_running_by_pid(&self, pid_file: &PathBuf) -> bool {
         if !pid_file.exists() {
             return false;
@@ -155,6 +161,7 @@ WantedBy=multi-user.target
     }
 
     /// 传统守护进程状态检查
+    #[allow(dead_code)]
     fn get_traditional_daemon_status(&self, config: &DaemonConfig) -> DaemonStatus {
         if let Some(ref pid_file) = config.pid_file {
             if self.is_process_running_by_pid(pid_file) {
@@ -244,7 +251,7 @@ impl DaemonManager for UnixDaemonManager {
 
         if self.use_systemd {
             self.run_systemctl(&["start", service_name]).await?;
-            info!("systemd服务已启动: {}", service_name);
+            info!("systemd服务已启动: {service_name}");
         } else {
             return Err(ServiceVitalsError::DaemonError(
                 "传统守护进程模式不支持远程启动，请直接运行程序".to_string(),
@@ -259,7 +266,7 @@ impl DaemonManager for UnixDaemonManager {
 
         if self.use_systemd {
             self.run_systemctl(&["stop", service_name]).await?;
-            info!("systemd服务已停止: {}", service_name);
+            info!("systemd服务已停止: {service_name}");
         } else {
             return Err(ServiceVitalsError::DaemonError(
                 "传统守护进程模式不支持远程停止，请使用信号终止进程".to_string(),
@@ -274,7 +281,7 @@ impl DaemonManager for UnixDaemonManager {
 
         if self.use_systemd {
             self.run_systemctl(&["restart", service_name]).await?;
-            info!("systemd服务已重启: {}", service_name);
+            info!("systemd服务已重启: {service_name}");
         } else {
             return Err(ServiceVitalsError::DaemonError(
                 "传统守护进程模式不支持远程重启".to_string(),

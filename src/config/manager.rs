@@ -16,13 +16,13 @@ use tracing::{debug, error, info, warn};
 #[derive(Debug, Clone)]
 pub enum ConfigDiff {
     /// 服务添加
-    ServiceAdded(ServiceConfig),
+    ServiceAdded(Box<ServiceConfig>),
     /// 服务移除
     ServiceRemoved(String),
     /// 服务修改
     ServiceModified {
-        old: ServiceConfig,
-        new: ServiceConfig,
+        old: Box<ServiceConfig>,
+        new: Box<ServiceConfig>,
     },
     /// 全局配置修改
     GlobalConfigModified,
@@ -221,20 +221,20 @@ impl ConfigManager {
                     // 服务存在，检查是否有修改
                     if **old_service != **new_service {
                         diffs.push(ConfigDiff::ServiceModified {
-                            old: (*old_service).clone(),
-                            new: (*new_service).clone(),
+                            old: Box::new((*old_service).clone()),
+                            new: Box::new((*new_service).clone()),
                         });
                     }
                 }
                 None => {
                     // 新增服务
-                    diffs.push(ConfigDiff::ServiceAdded((*new_service).clone()));
+                    diffs.push(ConfigDiff::ServiceAdded(Box::new((*new_service).clone())));
                 }
             }
         }
 
         // 检查删除的服务
-        for (name, _) in &old_services {
+        for name in old_services.keys() {
             if !new_services.contains_key(name) {
                 diffs.push(ConfigDiff::ServiceRemoved(name.clone()));
             }

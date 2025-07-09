@@ -38,8 +38,10 @@ pub struct ConfigWatcher {
     /// 防抖动延迟
     debounce_delay: Duration,
     /// 当前配置版本
+    #[allow(dead_code)]
     current_version: u64,
     /// 最后变更时间
+    #[allow(dead_code)]
     last_change_time: Option<Instant>,
 }
 
