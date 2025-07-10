@@ -23,6 +23,10 @@ pub enum ServiceVitalsError {
     #[error("守护进程错误: {0}")]
     DaemonError(String),
 
+    /// Web 服务器相关错误
+    #[error("Web 服务器错误: {0}")]
+    WebError(#[from] crate::web::WebError),
+
     /// IO错误
     #[error("IO错误: {0}")]
     Io(#[from] std::io::Error),
@@ -181,6 +185,7 @@ impl ServiceVitalsError {
             ServiceVitalsError::Io(_) => ErrorSeverity::High,
             ServiceVitalsError::Json(_) => ErrorSeverity::Medium,
             ServiceVitalsError::Other(_) => ErrorSeverity::Medium,
+            ServiceVitalsError::WebError(_) => ErrorSeverity::Medium,
         }
     }
 
@@ -199,6 +204,7 @@ impl ServiceVitalsError {
             ServiceVitalsError::Io(_) => RecoveryStrategy::UseDefault,
             ServiceVitalsError::Json(_) => RecoveryStrategy::Skip,
             ServiceVitalsError::Other(_) => RecoveryStrategy::None,
+            ServiceVitalsError::WebError(_) => RecoveryStrategy::None,
         }
     }
 

@@ -11,7 +11,7 @@ categories = ["command-line-utilities", "web-programming::http-client"]
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.46", features = ["full"] }
+tokio = { version = "1.37", features = ["full"] }
 
 # HTTP client
 reqwest = { version = "0.11", features = [
@@ -65,6 +65,12 @@ futures = "0.3"
 hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.21"
+
+# Web server dependencies
+axum = "0.7"
+askama = "0.12"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 
 # Unix-specific dependencies (Linux, macOS, etc.)

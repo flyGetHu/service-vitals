@@ -9,6 +9,11 @@ retry_attempts = 2
 retry_delay_seconds = 5
 default_feishu_webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/test-webhook"
 
+[global.web]
+enabled = true
+port = 8080
+bind_address = "127.0.0.1"
+
 [[services]]
 name = "测试HTTP服务"
 description = "用于测试的HTTP服务"

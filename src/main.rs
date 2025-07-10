@@ -8,7 +8,7 @@ use service_vitals::cli::args::{Args, Commands};
 use service_vitals::cli::commands::{
     CheckCommand, Command, InitCommand, InstallCommand, RestartServiceCommand,
     ServiceStatusCommand, StartServiceCommand, StatusCommand, StopCommand, StopServiceCommand,
-    TestNotificationCommand, UninstallCommand, ValidateCommand, VersionCommand,
+    TestNotificationCommand, UninstallCommand, ValidateCommand, VersionCommand, WebCommand,
 };
 use service_vitals::config::{ConfigLoader, ConfigWatcher, TomlConfigLoader};
 use service_vitals::daemon::{DaemonConfig, DaemonRuntime};
@@ -140,6 +140,10 @@ async fn execute_command(args: &Args) -> Result<()> {
         }
         Commands::ServiceStatus { .. } => {
             let command = ServiceStatusCommand;
+            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+        }
+        Commands::Web { .. } => {
+            let command = WebCommand;
             command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
         }
     }

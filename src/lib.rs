@@ -15,6 +15,7 @@ pub mod health;
 pub mod logging;
 pub mod notification;
 pub mod status;
+pub mod web;
 
 #[cfg(test)]
 mod logging_tests;
