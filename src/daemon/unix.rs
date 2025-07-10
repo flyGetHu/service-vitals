@@ -52,7 +52,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart={} --config {} start 
+ExecStart={} --config {} --daemon start 
 ExecReload=/bin/kill -USR1 $MAINPID
 Restart=always
 RestartSec=5
