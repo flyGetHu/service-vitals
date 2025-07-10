@@ -4,13 +4,15 @@
 
 use crate::cli::args::{Args, Commands, ConfigTemplate, NotificationType, OutputFormat};
 use crate::config::{ConfigLoader, TomlConfigLoader};
-use crate::daemon::{service_manager::ServiceManager, DaemonConfig};
+use crate::daemon::{service_manager::{ServiceManager, ServiceInfo}, DaemonConfig};
 use crate::error::Result;
 use crate::health::{HealthChecker, HttpHealthChecker};
 use crate::notification::sender::{MessageType, NotificationMessage};
 use crate::notification::{FeishuSender, NotificationSender};
 use crate::status::{OverallStatus, StatusManager};
 use async_trait::async_trait;
+use chrono;
+use serde::Serialize;
 use std::path::Path;
 use std::time::Duration;
 
@@ -741,59 +743,434 @@ impl Command for ServiceStatusCommand {
         if let Commands::ServiceStatus {
             service_name,
             format,
+            verbose,
         } = &args.command
         {
             let service_manager = ServiceManager::new();
 
+            // 获取系统服务状态
             let service_info = service_manager.get_service_status(service_name).await?;
+            
+            // 尝试从状态文件加载应用状态
+            let status_file = StatusManager::get_default_status_file_path();
+            let app_status = StatusManager::load_from_file(&status_file).await.ok();
 
+            // 根据格式输出
             match format {
                 OutputFormat::Json => {
-                    println!("{}", serde_json::to_string_pretty(&service_info)?);
+                    self.display_json_status(&service_info, &app_status, *verbose).await?;
                 }
                 OutputFormat::Yaml => {
-                    println!("name: {}", service_info.name);
-                    println!("status: {:?}", service_info.status);
-                    println!("is_installed: {}", service_info.is_installed);
-                    println!("platform: {}", service_info.platform);
+                    self.display_yaml_status(&service_info, &app_status, *verbose).await?;
                 }
                 OutputFormat::Text | OutputFormat::Table => {
-                    println!("🔍 服务状态报告");
-                    println!("服务名称: {}", service_info.name);
-                    println!("平台: {}", service_info.platform);
-                    println!(
-                        "安装状态: {}",
-                        if service_info.is_installed {
-                            "✅ 已安装"
-                        } else {
-                            "❌ 未安装"
-                        }
-                    );
-
-                    let status_display = match service_info.status {
-                        crate::daemon::DaemonStatus::Running => "✅ 运行中",
-                        crate::daemon::DaemonStatus::Stopped => "⏹️ 已停止",
-                        crate::daemon::DaemonStatus::Starting => "🔄 启动中",
-                        crate::daemon::DaemonStatus::Stopping => "⏹️ 停止中",
-                        crate::daemon::DaemonStatus::Unknown => "❓ 未知",
-                    };
-                    println!("运行状态: {status_display}");
-                }
-            }
-
-            let status_file = StatusManager::get_default_status_file_path();
-            // 尝试从状态文件加载状态
-            match StatusManager::load_from_file(&status_file).await {
-                Ok(status) => {
-                    println!("{}", serde_json::to_string_pretty(&status)?);
-                }
-                Err(_) => {
-                    println!("❌ 服务未运行或状态文件不存在");
+                    self.display_text_status(&service_info, &app_status, *verbose).await?;
                 }
             }
         }
         Ok(())
     }
+}
+
+impl ServiceStatusCommand {
+    /// 显示JSON格式状态
+    async fn display_json_status(
+        &self,
+        service_info: &ServiceInfo,
+        app_status: &Option<OverallStatus>,
+        verbose: bool,
+    ) -> Result<()> {
+        let combined_status = serde_json::json!({
+            "system_service": {
+                "name": service_info.name,
+                "status": service_info.status,
+                "is_installed": service_info.is_installed,
+                "platform": service_info.platform
+            },
+            "application_status": app_status,
+            "metrics_update_check": self.check_metrics_updates(service_info, app_status).await
+        });
+        
+        println!("{}", serde_json::to_string_pretty(&combined_status)?);
+        Ok(())
+    }
+
+    /// 显示YAML格式状态
+    async fn display_yaml_status(
+        &self,
+        service_info: &ServiceInfo,
+        app_status: &Option<OverallStatus>,
+        verbose: bool,
+    ) -> Result<()> {
+        println!("system_service:");
+        println!("  name: {}", service_info.name);
+        println!("  status: {:?}", service_info.status);
+        println!("  is_installed: {}", service_info.is_installed);
+        println!("  platform: {}", service_info.platform);
+        
+        if let Some(status) = app_status {
+            println!("application_status:");
+            println!("  start_time: {}", status.start_time);
+            println!("  config_path: {}", status.config_path.display());
+            println!("  total_services: {}", status.total_services);
+            println!("  healthy_services: {}", status.healthy_services);
+            println!("  unhealthy_services: {}", status.unhealthy_services);
+            println!("  disabled_services: {}", status.disabled_services);
+            if let Some(reload_time) = status.last_config_reload {
+                println!("  last_config_reload: {reload_time}");
+            }
+            
+            // 在 verbose 模式下显示服务详情
+            if verbose && !status.services.is_empty() {
+                println!("  services:");
+                for service in &status.services {
+                    println!("    - name: {}", service.name);
+                    println!("      url: {}", service.url);
+                    println!("      status: {:?}", service.status);
+                    println!("      enabled: {}", service.enabled);
+                    if let Some(last_check) = service.last_check {
+                        println!("      last_check: {last_check}");
+                    }
+                    if let Some(status_code) = service.status_code {
+                        println!("      status_code: {status_code}");
+                    }
+                    if let Some(response_time) = service.response_time_ms {
+                        println!("      response_time_ms: {response_time}");
+                    }
+                    if let Some(ref error) = service.error_message {
+                        println!("      error_message: {error}");
+                    }
+                }
+            }
+        } else {
+            println!("application_status: null");
+        }
+
+        let metrics_check = self.check_metrics_updates(service_info, app_status).await;
+        println!("metrics_update_check:");
+        println!("  is_updating: {}", metrics_check.is_updating);
+        println!("  last_update_age_seconds: {}", metrics_check.last_update_age_seconds.unwrap_or(0));
+        println!("  status_summary: {}", metrics_check.status_summary);
+        
+        Ok(())
+    }
+
+    /// 显示文本格式状态
+    async fn display_text_status(
+        &self,
+        service_info: &ServiceInfo,
+        app_status: &Option<OverallStatus>,
+        verbose: bool,
+    ) -> Result<()> {
+        println!("🔍 Service Vitals 系统服务状态报告");
+        println!(
+            "生成时间: {}",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        );
+        println!();
+
+        // 系统服务状态
+        println!("📋 系统服务状态:");
+        println!("  服务名称: {}", service_info.name);
+        println!("  平台: {}", service_info.platform);
+        println!(
+            "  安装状态: {}",
+            if service_info.is_installed {
+                "✅ 已安装"
+            } else {
+                "❌ 未安装"
+            }
+        );
+
+        let status_display = match service_info.status {
+            crate::daemon::DaemonStatus::Running => "✅ 运行中",
+            crate::daemon::DaemonStatus::Stopped => "⏹️ 已停止",
+            crate::daemon::DaemonStatus::Starting => "🔄 启动中",
+            crate::daemon::DaemonStatus::Stopping => "⏹️ 停止中",
+            crate::daemon::DaemonStatus::Unknown => "❓ 未知",
+        };
+        println!("  运行状态: {status_display}");
+        println!();
+
+        // 应用监控状态
+        if let Some(status) = app_status {
+            println!("📊 应用监控状态:");
+            println!(
+                "  启动时间: {}",
+                status.start_time.format("%Y-%m-%d %H:%M:%S UTC")
+            );
+            println!("  配置文件: {}", status.config_path.display());
+            println!("  运行时长: {}", self.format_duration(chrono::Utc::now() - status.start_time));
+            println!();
+
+            // 服务统计
+            println!("  📈 服务统计:");
+            println!("    总服务数: {}", status.total_services);
+            println!("    健康服务: {} ✅", status.healthy_services);
+            println!("    异常服务: {} ❌", status.unhealthy_services);
+            println!("    禁用服务: {} ⏸️", status.disabled_services);
+
+            // 健康度计算
+            let health_percentage = if status.total_services > 0 {
+                (status.healthy_services as f64 / status.total_services as f64) * 100.0
+            } else {
+                0.0
+            };
+            println!("    健康度: {:.1}%", health_percentage);
+
+            if let Some(reload_time) = status.last_config_reload {
+                println!(
+                    "    最后配置重载: {}",
+                    reload_time.format("%Y-%m-%d %H:%M:%S UTC")
+                );
+            }
+            println!();
+
+            // 服务检测活动
+            if !status.services.is_empty() {
+                if verbose {
+                    // verbose 模式：显示完整的服务表格
+                    println!("  📋 服务详情:");
+                    println!("┌─────────────────────────────────────────────────────────────────────────────────────┐");
+                    println!("│ 服务名称                │ 状态 │ 状态码 │ 响应时间 │ 最后检测时间              │");
+                    println!("├─────────────────────────────────────────────────────────────────────────────────────┤");
+
+                    for service in &status.services {
+                        let status_icon = match service.status {
+                            crate::health::HealthStatus::Up => "✅",
+                            crate::health::HealthStatus::Down => "❌",
+                            crate::health::HealthStatus::Unknown => "❓",
+                            crate::health::HealthStatus::Degraded => "⚠️",
+                        };
+
+                        let status_code_str = service
+                            .status_code
+                            .map(|c| c.to_string())
+                            .unwrap_or_else(|| "N/A".to_string());
+
+                        let response_time_str = service
+                            .response_time_ms
+                            .map(|t| format!("{t}ms"))
+                            .unwrap_or_else(|| "N/A".to_string());
+
+                        let last_check_str = service
+                            .last_check
+                            .map(|t| t.format("%m-%d %H:%M:%S").to_string())
+                            .unwrap_or_else(|| "从未检测".to_string());
+
+                        println!(
+                            "│ {:<23} │ {:<4} │ {:<6} │ {:<8} │ {:<25} │",
+                            truncate_string(&service.name, 23),
+                            status_icon,
+                            status_code_str,
+                            response_time_str,
+                            last_check_str
+                        );
+
+                        if let Some(ref error) = service.error_message {
+                            println!(
+                                "│   错误: {:<71} │",
+                                truncate_string(error, 71)
+                            );
+                        }
+                    }
+
+                    println!("└─────────────────────────────────────────────────────────────────────────────────────┘");
+                } else {
+                    // 简化模式：显示最近的检测活动
+                    println!("  📋 最近检测活动:");
+                    let mut recent_checks: Vec<_> = status.services.iter()
+                        .filter(|s| s.last_check.is_some())
+                        .collect();
+                    recent_checks.sort_by(|a, b| 
+                        b.last_check.unwrap_or_default().cmp(&a.last_check.unwrap_or_default())
+                    );
+
+                    for (i, service) in recent_checks.iter().take(5).enumerate() {
+                        let status_icon = match service.status {
+                            crate::health::HealthStatus::Up => "✅",
+                            crate::health::HealthStatus::Down => "❌",
+                            crate::health::HealthStatus::Unknown => "❓",
+                            crate::health::HealthStatus::Degraded => "⚠️",
+                        };
+
+                        let last_check_str = service
+                            .last_check
+                            .map(|t| self.format_relative_time(chrono::Utc::now() - t))
+                            .unwrap_or_else(|| "从未".to_string());
+
+                        println!(
+                            "    {}. {} {} ({}前)",
+                            i + 1,
+                            status_icon,
+                            service.name,
+                            last_check_str
+                        );
+                    }
+                    if recent_checks.len() > 5 {
+                        println!("    ... 还有 {} 个服务，使用 --verbose 查看完整列表", recent_checks.len() - 5);
+                    }
+                }
+                println!();
+            }
+        } else {
+            println!("📊 应用监控状态: ❌ 未运行或状态文件不存在");
+            println!("    请使用 'service-vitals start' 启动监控服务");
+            println!();
+        }
+
+        // 指标更新检查
+        let metrics_check = self.check_metrics_updates(service_info, app_status).await;
+        println!("🔄 指标更新检查:");
+        println!("  更新状态: {}", if metrics_check.is_updating { "✅ 正常更新" } else { "❌ 更新异常" });
+        
+        if let Some(age_seconds) = metrics_check.last_update_age_seconds {
+            if age_seconds > 0 {
+                println!("  最后更新: {}前", self.format_duration_seconds(age_seconds));
+            } else {
+                println!("  最后更新: 刚刚");
+            }
+        } else {
+            println!("  最后更新: 无记录");
+        }
+        
+        println!("  状态总结: {}", metrics_check.status_summary);
+        
+        // 建议操作
+        if !metrics_check.is_updating {
+            println!();
+            println!("💡 建议操作:");
+            if service_info.status != crate::daemon::DaemonStatus::Running {
+                println!("  - 启动系统服务: service-vitals start-service");
+            }
+            if app_status.is_none() {
+                println!("  - 检查服务配置和日志");
+                println!("  - 手动启动测试: service-vitals start --foreground");
+            } else {
+                println!("  - 检查服务日志: journalctl -u service-vitals -f");
+                println!("  - 重启服务: service-vitals restart-service");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 检查指标更新状态
+    async fn check_metrics_updates(
+        &self,
+        service_info: &ServiceInfo,
+        app_status: &Option<OverallStatus>,
+    ) -> MetricsUpdateCheck {
+        let mut is_updating = false;
+        let mut last_update_age_seconds = None;
+        let mut status_summary = String::new();
+
+        match (&service_info.status, app_status) {
+            (crate::daemon::DaemonStatus::Running, Some(status)) => {
+                // 系统服务运行中且有应用状态
+                if let Some(most_recent_check) = status.services.iter()
+                    .filter_map(|s| s.last_check)
+                    .max() {
+                    
+                    let age = (chrono::Utc::now() - most_recent_check).num_seconds() as u64;
+                    last_update_age_seconds = Some(age);
+                    
+                    // 如果最近5分钟内有更新，认为是正常的
+                    is_updating = age < 300;
+                    
+                    status_summary = if is_updating {
+                        "服务正常运行，指标持续更新".to_string()
+                    } else {
+                        format!("服务运行但指标更新滞后（{}前）", self.format_duration_seconds(age))
+                    };
+                } else {
+                    status_summary = "服务运行中，但尚无检测记录".to_string();
+                }
+            }
+            (crate::daemon::DaemonStatus::Running, None) => {
+                status_summary = "系统服务运行中，但应用状态不可用".to_string();
+            }
+            (status, _) => {
+                status_summary = format!("系统服务状态: {:?}", status);
+            }
+        }
+
+        MetricsUpdateCheck {
+            is_updating,
+            last_update_age_seconds,
+            status_summary,
+        }
+    }
+
+    /// 格式化持续时间
+    fn format_duration(&self, duration: chrono::Duration) -> String {
+        let total_seconds = duration.num_seconds();
+        
+        if total_seconds < 60 {
+            format!("{}秒", total_seconds)
+        } else if total_seconds < 3600 {
+            format!("{}分钟", total_seconds / 60)
+        } else if total_seconds < 86400 {
+            let hours = total_seconds / 3600;
+            let minutes = (total_seconds % 3600) / 60;
+            format!("{}小时{}分钟", hours, minutes)
+        } else {
+            let days = total_seconds / 86400;
+            let hours = (total_seconds % 86400) / 3600;
+            format!("{}天{}小时", days, hours)
+        }
+    }
+
+    /// 格式化相对时间
+    fn format_relative_time(&self, duration: chrono::Duration) -> String {
+        let total_seconds = duration.num_seconds();
+        
+        if total_seconds < 60 {
+            format!("{}秒", total_seconds)
+        } else if total_seconds < 3600 {
+            format!("{}分钟", total_seconds / 60)
+        } else if total_seconds < 86400 {
+            format!("{}小时", total_seconds / 3600)
+        } else {
+            format!("{}天", total_seconds / 86400)
+        }
+    }
+
+    /// 格式化秒数为可读格式
+    fn format_duration_seconds(&self, seconds: u64) -> String {
+        if seconds < 60 {
+            format!("{}秒", seconds)
+        } else if seconds < 3600 {
+            format!("{}分钟", seconds / 60)
+        } else if seconds < 86400 {
+            let hours = seconds / 3600;
+            let minutes = (seconds % 3600) / 60;
+            if minutes > 0 {
+                format!("{}小时{}分钟", hours, minutes)
+            } else {
+                format!("{}小时", hours)
+            }
+        } else {
+            let days = seconds / 86400;
+            let hours = (seconds % 86400) / 3600;
+            if hours > 0 {
+                format!("{}天{}小时", days, hours)
+            } else {
+                format!("{}天", days)
+            }
+        }
+    }
+}
+
+/// 指标更新检查结果
+#[derive(Debug, Clone, Serialize)]
+struct MetricsUpdateCheck {
+    /// 是否正在更新
+    is_updating: bool,
+    /// 最后更新距离现在的秒数
+    last_update_age_seconds: Option<u64>,
+    /// 状态总结
+    status_summary: String,
 }
 
 /// 测试通知命令
