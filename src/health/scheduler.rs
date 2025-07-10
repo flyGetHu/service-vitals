@@ -310,7 +310,11 @@ impl TaskScheduler {
                 if result.status.is_healthy() {
                     debug!("服务检测正常: {}", service_name_for_task);
                 } else {
-                    warn!("服务检测失败: {}", service_name_for_task);
+                    warn!(
+                        "服务检测失败: {},{}",
+                        service_name_for_task,
+                        result.error_message.unwrap_or_else(|| "N/A".to_string())
+                    );
                 }
             }
         });
@@ -558,7 +562,11 @@ impl TaskScheduler {
                 if result.status.is_healthy() {
                     debug!("服务检测正常: {}", service_name_for_task);
                 } else {
-                    warn!("服务检测失败: {}", service_name_for_task);
+                    warn!(
+                        "服务检测失败: {},{}",
+                        service_name_for_task,
+                        result.error_message.unwrap_or_else(|| "N/A".to_string())
+                    );
                 }
             }
         });
