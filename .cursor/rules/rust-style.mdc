@@ -1,0 +1,69 @@
+---
+alwaysApply: true
+---
+
+# Rust 项目全局开发规范
+
+## 技术栈限制
+- 仅允许使用 Rust 官方稳定版（stable channel）及 crates.io 上主流、无安全漏洞的依赖。
+- 禁止使用未审查的实验性 crate 或 nightly-only 特性，除非有充分理由并经团队评审。
+- 优先采用社区推荐的异步/并发方案（如 tokio、async-std），避免自造轮子。
+
+## 编码风格
+- 必须使用 `cargo fmt` 进行代码格式化，确保风格统一。
+- 变量、函数、模块命名遵循 snake_case，类型/结构体/枚举使用 PascalCase，常量使用 SCREAMING_SNAKE_CASE。
+- 文件每行最大长度建议不超过 120 字符。
+- 禁止未使用的变量、函数、模块和依赖。
+- 必须为公共 API、结构体、枚举、trait 添加文档注释（///）。
+
+## 代码验证
+- 必须通过 `cargo clippy --all-targets --all-features -- -D warnings`，所有警告视为错误。
+- 必须通过 `cargo check` 和 `cargo test`，保证无编译错误和测试全部通过。
+- 推荐集成 CI，自动执行格式化、静态检查和测试。
+
+## 跨平台兼容性
+- 禁止硬编码路径分隔符，统一使用 `std::path::Path` 相关 API。
+- 不允许依赖仅支持单一平台的 crate，除非有跨平台降级方案。
+
+## 参考命令
+```powershell
+# Windows (PowerShell)
+cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings
+```
+```bash
+# Linux/macOS (Bash)
+cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings# Rust 项目全局开发规范
+
+## 技术栈限制
+- 仅允许使用 Rust 官方稳定版（stable channel）及 crates.io 上主流、无安全漏洞的依赖。
+- 禁止使用未审查的实验性 crate 或 nightly-only 特性，除非有充分理由并经团队评审。
+- 优先采用社区推荐的异步/并发方案（如 tokio、async-std），避免自造轮子。
+
+## 编码风格
+- 必须使用 `cargo fmt` 进行代码格式化，确保风格统一。
+- 变量、函数、模块命名遵循 snake_case，类型/结构体/枚举使用 PascalCase，常量使用 SCREAMING_SNAKE_CASE。
+- 文件每行最大长度建议不超过 120 字符。
+- 禁止未使用的变量、函数、模块和依赖。
+- 必须为公共 API、结构体、枚举、trait 添加文档注释（///）。
+
+## 代码验证
+- 必须通过 `cargo clippy --all-targets --all-features -- -D warnings`，所有警告视为错误。
+- 必须通过 `cargo check` 和 `cargo test`，保证无编译错误和测试全部通过。
+- 推荐集成 CI，自动执行格式化、静态检查和测试。
+
+## 跨平台兼容性
+- 禁止硬编码路径分隔符，统一使用 `std::path::Path` 相关 API。
+- 不允许依赖仅支持单一平台的 crate，除非有跨平台降级方案。
+
+## 参考命令
+```powershell
+# Windows (PowerShell)
+cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings
+```
+```bash
+# Linux/macOS (Bash)
+cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings
