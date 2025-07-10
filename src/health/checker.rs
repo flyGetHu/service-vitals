@@ -322,6 +322,7 @@ mod tests {
             description: Some("Test service".to_string()),
             headers: HashMap::new(),
             body: None,
+            alert_cooldown_secs: Some(60),
         }
     }
 

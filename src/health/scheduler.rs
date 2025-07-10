@@ -191,7 +191,7 @@ impl TaskScheduler {
                 let cooldown_secs = service.alert_cooldown_secs.unwrap_or(60); // 默认60秒
                 let can_alert = notification_state
                     .alert_cooldown_until
-                    .map_or(true, |until| now >= until);
+                    .is_none_or(|until| now >= until);
                 if can_alert {
                     if let Some(ref notifier) = notifier {
                         let send_result = notifier.send_health_alert(service, result).await;
