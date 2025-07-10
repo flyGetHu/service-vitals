@@ -353,6 +353,7 @@ mod tests {
                 retry_attempts: 3,
                 retry_delay_seconds: 5,
                 headers: HashMap::new(),
+                web: None,
             },
             services: vec![],
         }

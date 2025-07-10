@@ -311,6 +311,31 @@ pub enum Commands {
         #[arg(long, value_enum, default_value = "text", help = "输出格式")]
         format: OutputFormat,
     },
+
+    /// Web 服务器相关命令
+    Web {
+        #[command(subcommand)]
+        command: WebCommands,
+    },
+}
+
+/// Web 子命令
+#[derive(Subcommand, Debug, Clone)]
+pub enum WebCommands {
+    /// 启动 Web 监控面板服务器
+    Serve {
+        /// Web 服务器端口
+        #[arg(short, long, help = "Web 服务器端口")]
+        port: Option<u16>,
+
+        /// 绑定地址
+        #[arg(short, long, help = "绑定地址")]
+        bind_address: Option<String>,
+
+        /// 是否在前台运行
+        #[arg(short, long, help = "在前台运行")]
+        foreground: bool,
+    },
 }
 
 /// 输出格式枚举

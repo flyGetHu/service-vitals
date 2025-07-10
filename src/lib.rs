@@ -15,6 +15,7 @@ pub mod health;
 pub mod logging;
 pub mod notification;
 pub mod status;
+pub mod web;
 
 // 重新导出主要类型
 pub use config::{Config, GlobalConfig, ServiceConfig};
