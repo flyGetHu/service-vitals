@@ -5,3 +5,4 @@
 name = "示例服务"
 url = "https://httpbin.org/status/200"
 expected_status_codes = [200]
+alert_cooldown_secs = 60               # 可选，告警最小间隔（秒），时间退避，默认60

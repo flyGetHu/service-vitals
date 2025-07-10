@@ -73,6 +73,8 @@ pub struct ServiceConfig {
     pub headers: HashMap<String, String>,
     /// 请求体（用于POST/PUT请求）
     pub body: Option<serde_json::Value>,
+    /// 告警冷却时间（秒，时间退避，默认300）
+    pub alert_cooldown_secs: Option<u64>,
 }
 
 // 默认值函数
@@ -215,6 +217,7 @@ mod tests {
                 description: Some("Test service description".to_string()),
                 headers: HashMap::new(),
                 body: None,
+                alert_cooldown_secs: Some(300),
             }],
         }
     }

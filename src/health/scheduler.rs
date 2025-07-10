@@ -27,6 +27,10 @@ pub struct ServiceNotificationState {
     pub consecutive_failures: u32,
     /// 通知发送次数统计
     pub notification_count: u32,
+    /// 下次告警的失败次数
+    pub next_alert_threshold: u32,
+    /// 下次可告警的最早时间
+    pub alert_cooldown_until: Option<Instant>,
 }
 
 /// 调度器状态
@@ -158,6 +162,7 @@ impl TaskScheduler {
         let current_status = result.status;
         let now = Instant::now();
         let is_healthy = current_status.is_healthy();
+
         // 1. 检查是否需要发送恢复通知
         let need_recover_notify = is_healthy && notification_state.consecutive_failures > 0;
         if need_recover_notify {
@@ -174,34 +179,42 @@ impl TaskScheduler {
                     }
                 }
             }
+            notification_state.consecutive_failures = 0;
+            // 恢复时重置告警冷却时间
+            notification_state.alert_cooldown_until = None;
         }
 
-        // 2. 检查是否需要发送告警通知
-        if !current_status.is_healthy() {
+        // 2. 检查是否需要发送告警通知（基于时间退避）
+        if !is_healthy {
             notification_state.consecutive_failures += 1;
-            let need_alert_notify =
-                notification_state.consecutive_failures >= service.failure_threshold;
-            if need_alert_notify {
-                if let Some(ref notifier) = notifier {
-                    let send_result = notifier.send_health_alert(service, result).await;
-                    match send_result {
-                        Ok(()) => {
-                            info!("发送服务告警通知成功: {}", service.name);
-                            notification_state.notification_count += 1;
-                            notification_state.last_notification_time = Some(now);
-                            Self::update_notification_stats_static(status_arc, true).await;
-                        }
-                        Err(e) => {
-                            error!("发送服务告警通知失败: {} - {}", service.name, e);
-                            Self::update_notification_stats_static(status_arc, false).await;
+            if notification_state.consecutive_failures >= service.failure_threshold {
+                let cooldown_secs = service.alert_cooldown_secs.unwrap_or(60); // 默认60秒
+                let can_alert = notification_state
+                    .alert_cooldown_until
+                    .map_or(true, |until| now >= until);
+                if can_alert {
+                    if let Some(ref notifier) = notifier {
+                        let send_result = notifier.send_health_alert(service, result).await;
+                        match send_result {
+                            Ok(()) => {
+                                info!("发送服务告警通知成功: {}", service.name);
+                                notification_state.notification_count += 1;
+                                notification_state.last_notification_time = Some(now);
+                                Self::update_notification_stats_static(status_arc, true).await;
+                            }
+                            Err(e) => {
+                                error!("发送服务告警通知失败: {} - {}", service.name, e);
+                                Self::update_notification_stats_static(status_arc, false).await;
+                            }
                         }
                     }
+                    // 设置下次可告警的最早时间
+                    notification_state.alert_cooldown_until =
+                        Some(now + Duration::from_secs(cooldown_secs));
                 }
             }
         }
-        if is_healthy {
-            notification_state.consecutive_failures = 0;
-        }
+
         // 3. 更新最后健康状态
         notification_state.last_health_status = Some(current_status);
 

@@ -22,6 +22,7 @@ expected_status_codes = [200, 201]
 failure_threshold = 2
 enabled = true
 description = "示例API健康检测"
+alert_cooldown_secs = 60               # 可选，告警最小间隔（秒），时间退避，默认60
 
 [[services]]
 name = "示例Web服务"

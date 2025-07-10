@@ -76,6 +76,9 @@ enabled = true
 # 可选：服务描述
 description = "主站 API 健康检测"
 
+# 可选：告警最小间隔（秒，时间退避，默认60），即两次告警之间的最小时间
+alert_cooldown_secs = 60
+
 # 可选：请求体（仅 POST/PUT/PATCH 等方法需要）
 # body = { "key" = "value" }
 
@@ -95,6 +98,7 @@ expected_status_codes = [200]
 failure_threshold = 1
 enabled = true
 description = "数据库连接检测"
+alert_cooldown_secs = 60 # 例如数据库服务告警最小间隔1分钟
 
 # (可选) 服务独立请求头
 # [services.headers]
