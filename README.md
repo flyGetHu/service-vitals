@@ -590,3 +590,37 @@ A: 是的，配置文件中可以使用 `${VARIABLE_NAME}` 语法引用环境变
 - **问题追踪**: <https://github.com/flyGetHu/service-vitals/issues>
 - **贡献指南**: <https://github.com/flyGetHu/service-vitals/blob/main/CONTRIBUTING.md>
 - **更新日志**: <https://github.com/flyGetHu/service-vitals/blob/main/CHANGELOG.md>
+
+## ⚙️ Git 提交钩子
+
+本仓库在 `githooks/` 目录下提供跨平台 `pre-commit` 钩子：
+
+```powershell
+# Windows (PowerShell)
+.\githooks\pre-commit.ps1
+```
+```bash
+# Linux/macOS (Bash)
+./githooks/pre-commit
+```
+
+启用方式：
+
+```powershell
+# Windows (PowerShell)
+# 设置 hooksPath 指向 githooks 目录
+git config core.hooksPath .\githooks
+# 给予执行权限（Git Bash）
+chmod +x .\githooks\pre-commit
+```
+```bash
+# Linux/macOS (Bash)
+# 设置 hooksPath 指向 githooks 目录
+git config core.hooksPath ./githooks
+# 给予执行权限
+chmod +x ./githooks/pre-commit
+```
+
+每次 `git commit` 将自动执行：
+1. `cargo fmt --all -- --check`  ─ 格式未通过则中止提交。
+2. `cargo clippy --all-targets --all-features -- -D warnings`  ─ 存在警告亦中止提交。

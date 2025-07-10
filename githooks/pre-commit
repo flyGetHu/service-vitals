@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Service Vitals Git pre-commit hook (Linux/macOS)
+# ---------------------------------------------
+# 运行 Rust 格式化检查和 Clippy 静态分析；如有任何问题则中止提交。
+
+set -euo pipefail
+
+printf '\n\033[1;34m[Git Hook] Running cargo fmt --all -- --check\033[0m\n'
+if ! cargo fmt --all -- --check; then
+  printf '\033[0;31m[Git Hook] ✗ 代码格式检查未通过，请运行 `cargo fmt --all` 修复格式。\033[0m\n'
+  exit 1
+fi
+
+printf '\033[1;34m[Git Hook] Running cargo clippy\033[0m\n'
+if ! cargo clippy --all-targets --all-features -- -D warnings; then
+  printf '\033[0;31m[Git Hook] ✗ Clippy 检查未通过，请修复警告后再提交。\033[0m\n'
+  exit 1
+fi
+
+printf '\033[0;32m[Git Hook] ✓ 所有检查通过，允许提交。\033[0m\n'
+
+exit 0 

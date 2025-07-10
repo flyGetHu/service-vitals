@@ -120,57 +120,17 @@ impl InitCommand {
 
     /// 获取最小配置模板
     fn get_minimal_config(&self) -> &'static str {
-        r#"[global]
-# 最小配置只需要指定必要的全局设置
-
-[[services]]
-name = "示例服务"
-url = "https://httpbin.org/status/200"
-expected_status_codes = [200]
-"#
+        include_str!("../../examples/minimal_config.toml")
     }
 
     /// 获取基础配置模板
     fn get_basic_config(&self) -> &'static str {
-        r#"[global]
-# 飞书webhook URL
-default_feishu_webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-
-# 全局检测间隔，单位秒（默认60）
-check_interval_seconds = 60
-
-# 日志级别（可选，默认"info"）
-log_level = "info"
-
-# 请求超时时间，单位秒（默认10）
-request_timeout_seconds = 10
-
-# 最大并发检测数（默认50）
-max_concurrent_checks = 50
-
-[[services]]
-name = "示例API服务"
-url = "https://api.example.com/health"
-method = "GET"
-expected_status_codes = [200, 201]
-failure_threshold = 2
-enabled = true
-description = "示例API健康检测"
-
-[[services]]
-name = "示例Web服务"
-url = "https://www.example.com"
-method = "GET"
-expected_status_codes = [200]
-failure_threshold = 1
-enabled = true
-description = "示例Web服务健康检测"
-"#
+        include_str!("../../examples/basic_config.toml")
     }
 
     /// 获取完整配置模板
     fn get_full_config(&self) -> &'static str {
-        include_str!("../../examples/minimal_config.toml")
+        include_str!("../../examples/full_config.toml")
     }
 }
 

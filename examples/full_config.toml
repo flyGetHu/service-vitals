@@ -1,0 +1,101 @@
+# Service Vitals 完整配置示例
+# ------------------------------
+# 复制本文件并根据实际需求修改即可。
+# 支持在字符串中使用 ${ENV_VAR_NAME} 引用环境变量。
+
+[global]
+# 默认飞书 Webhook URL（可选，单独服务可覆盖）
+# default_feishu_webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/your-webhook-token"
+
+# 消息模板（可选，Handlebars 语法）
+# 可使用占位符：{{service_name}}、{{service_url}}、{{status_code}}、{{response_time}}、{{timestamp}}、{{error_message}}
+message_template = """
+🚨 **服务告警**
+- **服务名称**: {{service_name}}
+- **服务URL**: {{service_url}}
+- **状态码**: {{#if status_code}}{{status_code}}{{else}}N/A{{/if}}
+- **响应时间**: {{response_time}}ms
+- **检测时间**: {{timestamp}}
+{{#if error_message}}
+- **错误信息**: {{error_message}}
+{{/if}}
+"""
+
+# 全局检测间隔（秒）
+check_interval_seconds = 60
+
+# 日志级别：debug | info | warn | error
+log_level = "info"
+
+# HTTP 请求超时时间（秒）
+request_timeout_seconds = 10
+
+# 最大并发检测数
+max_concurrent_checks = 100
+
+# 失败重试次数
+retry_attempts = 3
+
+# 重试间隔（秒）
+retry_delay_seconds = 5
+
+# 可选的全局请求头（键值对）
+[global.headers]
+"User-Agent" = "ServiceVitals/1.0"
+"Accept" = "application/json"
+
+# ------------------------------
+# 服务列表
+# ------------------------------
+
+[[services]]
+# 必填：服务名称
+name = "主站API"
+
+# 必填：服务健康检查 URL
+url = "https://api.example.com/health"
+
+# 可选：HTTP 方法（默认 GET）
+method = "GET"
+
+# 必填：期望的 HTTP 状态码列表
+expected_status_codes = [200, 201]
+
+# 可选：服务专属飞书 Webhook URL
+feishu_webhook_url = "https://open.feishu.cn/open-apis/bot/v2/hook/service-specific-token"
+
+# 可选：失败阈值（当连续失败次数 >= 该值时触发告警）
+failure_threshold = 2
+
+# 可选：服务特定检测间隔（秒），若不设置则使用全局值
+check_interval_seconds = 60
+
+# 可选：是否启用该服务（默认 true）
+enabled = true
+
+# 可选：服务描述
+description = "主站 API 健康检测"
+
+# 可选：请求体（仅 POST/PUT/PATCH 等方法需要）
+# body = { "key" = "value" }
+
+# 服务专属请求头
+[services.headers]
+"Authorization" = "Bearer ${API_TOKEN}"
+"Content-Type" = "application/json"
+
+# ---- 第二个示例服务 ----
+
+[[services]]
+name = "数据库服务"
+url = "https://db.example.com/ping"
+method = "GET"
+expected_status_codes = [200]
+# 未设置 feishu_webhook_url，使用全局或第 1 个服务的默认
+failure_threshold = 1
+enabled = true
+description = "数据库连接检测"
+
+# (可选) 服务独立请求头
+# [services.headers]
+# "X-Custom-Header" = "value"
