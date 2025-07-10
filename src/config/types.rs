@@ -42,6 +42,8 @@ pub struct GlobalConfig {
     /// 全局请求头
     #[serde(default)]
     pub headers: HashMap<String, String>,
+    /// Web 服务器配置
+    pub web: Option<WebConfig>,
 }
 
 /// 服务配置结构
@@ -204,6 +206,7 @@ mod tests {
                 retry_attempts: 3,
                 retry_delay_seconds: 5,
                 headers: HashMap::new(),
+                web: None,
             },
             services: vec![ServiceConfig {
                 name: "Test Service".to_string(),
@@ -298,6 +301,7 @@ mod tests {
             retry_attempts: default_retry_attempts(),
             retry_delay_seconds: default_retry_delay(),
             headers: HashMap::new(),
+            web: None,
         };
 
         assert_eq!(global_config.check_interval_seconds, 60);
@@ -307,4 +311,43 @@ mod tests {
         assert_eq!(global_config.retry_attempts, 3);
         assert_eq!(global_config.retry_delay_seconds, 5);
     }
+}
+
+/// Web 服务器配置结构
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WebConfig {
+    /// 是否启用 Web 功能
+    #[serde(default = "default_web_enabled")]
+    pub enabled: bool,
+    /// 监听端口
+    #[serde(default = "default_web_port")]
+    pub port: u16,
+    /// 绑定地址
+    #[serde(default = "default_web_bind_address")]
+    pub bind_address: String,
+}
+
+impl Default for WebConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_web_enabled(),
+            port: default_web_port(),
+            bind_address: default_web_bind_address(),
+        }
+    }
+}
+
+/// 默认 Web 功能启用状态
+fn default_web_enabled() -> bool {
+    false
+}
+
+/// 默认 Web 服务器端口
+fn default_web_port() -> u16 {
+    8080
+}
+
+/// 默认 Web 服务器绑定地址
+fn default_web_bind_address() -> String {
+    "0.0.0.0".to_string()
 }
