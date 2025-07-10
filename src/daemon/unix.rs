@@ -5,7 +5,7 @@
 use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus};
 use crate::error::{Result, ServiceVitalsError};
 use async_trait::async_trait;
-use log::{debug, error, info, warn};
+use tracing::{debug, error, info, warn};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;

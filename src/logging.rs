@@ -8,6 +8,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tracing_subscriber::{
+    fmt, prelude::*, registry, EnvFilter, Layer,
+};
+use tracing_log::LogTracer;
 
 /// 日志轮转策略
 #[derive(Debug, Clone)]
@@ -207,49 +211,72 @@ impl LoggingSystem {
     /// # 返回
     /// * `Result<LoggingSystem, anyhow::Error>` - 初始化结果
     pub fn setup_logging(config: LogConfig) -> anyhow::Result<Self> {
-        let mut builder = env_logger::Builder::new();
+        // 设置 log crate 的日志转发到 tracing
+        LogTracer::init().ok(); // 忽略错误，可能已经初始化过了
 
-        // 设置日志级别
-        builder.filter_level(config.level);
+        // 创建环境过滤器
+        let mut env_filter = EnvFilter::from_default_env()
+            .add_directive(Self::convert_level_to_directive(config.level));
 
-        // 设置模块级别日志控制
+        // 添加模块级别过滤
         for (module, level) in &config.module_levels {
-            builder.filter_module(module, *level);
+            let directive = format!("{}={}", module, Self::level_to_string(*level))
+                .parse()
+                .unwrap_or_else(|_| format!("{module}=info").parse().unwrap());
+            env_filter = env_filter.add_directive(directive);
         }
 
-        // 设置日志格式
-        if config.json_format {
-            builder.format(|buf, record| {
-                use std::io::Write;
-                let json_log = json!({
-                    "timestamp": chrono::Utc::now().to_rfc3339(),
-                    "level": record.level().to_string(),
-                    "target": record.target(),
-                    "message": record.args().to_string(),
-                    "module": record.module_path(),
-                    "file": record.file(),
-                    "line": record.line(),
-                });
-                writeln!(buf, "{json_log}")
-            });
+        // 创建格式化层
+        let fmt_layer = if config.json_format {
+            fmt::layer()
+                .json()
+                .with_timer(fmt::time::ChronoUtc::rfc_3339())
+                .with_file(true)
+                .with_line_number(true)
+                .boxed()
         } else {
-            builder.format(|buf, record| {
-                use std::io::Write;
-                writeln!(
-                    buf,
-                    "{} [{}] {} - {} ({}:{})",
-                    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.3f"),
-                    record.level(),
-                    record.target(),
-                    record.args(),
-                    record.file().unwrap_or("unknown"),
-                    record.line().unwrap_or(0)
-                )
-            });
-        }
+            fmt::layer()
+                .with_timer(fmt::time::ChronoUtc::rfc_3339())
+                .with_ansi(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_thread_ids(true)
+                .with_thread_names(true)
+                .boxed()
+        };
 
-        // 初始化日志系统
-        builder.try_init()?;
+        // 设置输出目标
+        let result = if config.console {
+            // 控制台输出
+            registry()
+                .with(env_filter)
+                .with(fmt_layer)
+                .try_init()
+        } else if let Some(file_path) = &config.file_path {
+            // 文件输出 (简单实现，不包含轮转)
+            let file = std::fs::File::create(file_path)?;
+            let file_layer = fmt::layer()
+                .with_writer(file)
+                .with_ansi(false)
+                .with_file(true)
+                .with_line_number(true);
+
+            registry()
+                .with(env_filter)
+                .with(file_layer)
+                .try_init()
+        } else {
+            // 默认控制台输出
+            registry()
+                .with(env_filter)
+                .with(fmt_layer)
+                .try_init()
+        };
+
+        // 忽略重复初始化错误
+        if let Err(e) = result {
+            tracing::warn!("日志系统可能已经初始化: {}", e);
+        }
 
         let system = Self::new(config.clone());
 
@@ -266,10 +293,35 @@ impl LoggingSystem {
             });
         }
 
-        log::info!("日志系统初始化完成");
-        log::debug!("日志配置: {config:?}");
+        tracing::info!("日志系统初始化完成");
+        tracing::debug!("日志配置: {:?}", config);
 
         Ok(system)
+    }
+
+    /// 将 log::LevelFilter 转换为 tracing 的指令
+    fn convert_level_to_directive(level: LevelFilter) -> tracing_subscriber::filter::Directive {
+        use tracing_subscriber::filter::Directive;
+        match level {
+            LevelFilter::Off => "off".parse().unwrap(),
+            LevelFilter::Error => Directive::from(tracing::Level::ERROR),
+            LevelFilter::Warn => Directive::from(tracing::Level::WARN),
+            LevelFilter::Info => Directive::from(tracing::Level::INFO),
+            LevelFilter::Debug => Directive::from(tracing::Level::DEBUG),
+            LevelFilter::Trace => Directive::from(tracing::Level::TRACE),
+        }
+    }
+
+    /// 将 log::LevelFilter 转换为字符串
+    fn level_to_string(level: LevelFilter) -> &'static str {
+        match level {
+            LevelFilter::Off => "off",
+            LevelFilter::Error => "error",
+            LevelFilter::Warn => "warn",
+            LevelFilter::Info => "info",
+            LevelFilter::Debug => "debug",
+            LevelFilter::Trace => "trace",
+        }
     }
 
     /// 获取指标收集器
@@ -295,9 +347,9 @@ impl LoggingSystem {
         });
 
         if self.config.json_format {
-            log::info!("{audit_entry}");
+            tracing::info!("{audit_entry}");
         } else {
-            log::info!(
+            tracing::info!(
                 "AUDIT: {} by {} - {} ({})",
                 operation,
                 user.unwrap_or("system"),
@@ -325,9 +377,9 @@ impl LoggingSystem {
         });
 
         if self.config.json_format {
-            log::info!("{perf_entry}");
+            tracing::info!("{perf_entry}");
         } else {
-            log::info!(
+            tracing::info!(
                 "PERF: {} - {}ms ({})",
                 operation,
                 duration_ms,
@@ -365,9 +417,9 @@ impl LoggingSystem {
         });
 
         if self.config.json_format {
-            log::info!("{health_entry}");
+            tracing::info!("{health_entry}");
         } else {
-            log::info!(
+            tracing::info!(
                 "HEALTH: {} - {} ({}ms) {}",
                 service_name,
                 status,
@@ -409,9 +461,9 @@ impl LoggingSystem {
         });
 
         if self.config.json_format {
-            log::info!("{notification_entry}");
+            tracing::info!("{notification_entry}");
         } else {
-            log::info!(
+            tracing::info!(
                 "NOTIFICATION: {} to {} - {} {}",
                 notification_type,
                 recipient,
@@ -464,7 +516,7 @@ impl LoggingSystem {
             }).collect::<HashMap<_, _>>()
         });
 
-        log::info!("{metrics_entry}");
+        tracing::info!("{metrics_entry}");
 
         // 重置计数器类型的指标
         collector.reset();

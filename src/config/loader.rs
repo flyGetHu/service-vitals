@@ -147,8 +147,8 @@ impl ConfigLoader for TomlConfigLoader {
         // 验证配置
         self.validate(&config)?;
 
-        log::info!("成功加载配置文件: {}", path.display());
-        log::debug!("配置内容: {:?}", config);
+        tracing::info!("成功加载配置文件: {}", path.display());
+        tracing::debug!("配置内容: {:?}", config);
 
         Ok(config)
     }
@@ -160,7 +160,7 @@ impl ConfigLoader for TomlConfigLoader {
         // 验证配置
         self.validate(&config)?;
 
-        log::debug!("成功解析配置字符串");
+        tracing::debug!("成功解析配置字符串");
 
         Ok(config)
     }

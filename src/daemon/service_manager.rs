@@ -6,7 +6,7 @@
 use crate::daemon::PlatformDaemonManager;
 use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus};
 use crate::error::Result;
-use log::{error, info};
+use tracing::{error, info};
 use serde::{Deserialize, Serialize};
 
 /// 服务管理器
