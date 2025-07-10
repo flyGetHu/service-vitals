@@ -27,8 +27,6 @@ pub struct ServiceNotificationState {
     pub consecutive_failures: u32,
     /// 通知发送次数统计
     pub notification_count: u32,
-    /// 是否已发送告警
-    pub alert_sent: bool,
 }
 
 /// 调度器状态
@@ -159,42 +157,36 @@ impl TaskScheduler {
     ) -> Result<()> {
         let current_status = result.status;
         let now = Instant::now();
-
-        // 更新连续失败计数
-        if current_status.is_healthy() {
-            if notification_state.consecutive_failures > 0 {
-                // 服务恢复，发送恢复通知
-                if notification_state.alert_sent {
-                    if let Some(ref notifier) = notifier {
-                        match notifier.send_health_alert(service, result).await {
-                            Ok(()) => {
-                                info!("发送服务恢复通知成功: {}", service.name);
-                                Self::update_notification_stats_static(status_arc, true).await;
-                            }
-                            Err(e) => {
-                                error!("发送服务恢复通知失败: {} - {}", service.name, e);
-                                Self::update_notification_stats_static(status_arc, false).await;
-                            }
-                        }
+        let is_healthy = current_status.is_healthy();
+        // 1. 检查是否需要发送恢复通知
+        let need_recover_notify = is_healthy && notification_state.consecutive_failures > 0;
+        if need_recover_notify {
+            if let Some(ref notifier) = notifier {
+                let send_result = notifier.send_health_alert(service, result).await;
+                match send_result {
+                    Ok(()) => {
+                        info!("发送服务恢复通知成功: {}", service.name);
+                        Self::update_notification_stats_static(status_arc, true).await;
                     }
-                    notification_state.alert_sent = false;
+                    Err(e) => {
+                        error!("发送服务恢复通知失败: {} - {}", service.name, e);
+                        Self::update_notification_stats_static(status_arc, false).await;
+                    }
                 }
             }
-            notification_state.consecutive_failures = 0;
-        } else {
+        }
+
+        // 2. 检查是否需要发送告警通知
+        if !current_status.is_healthy() {
             notification_state.consecutive_failures += 1;
-
-            // 检查是否需要发送告警
-            let should_send_alert = notification_state.consecutive_failures
-                >= service.failure_threshold
-                && !notification_state.alert_sent;
-
-            if should_send_alert {
+            let need_alert_notify =
+                notification_state.consecutive_failures >= service.failure_threshold;
+            if need_alert_notify {
                 if let Some(ref notifier) = notifier {
-                    match notifier.send_health_alert(service, result).await {
+                    let send_result = notifier.send_health_alert(service, result).await;
+                    match send_result {
                         Ok(()) => {
                             info!("发送服务告警通知成功: {}", service.name);
-                            notification_state.alert_sent = true;
                             notification_state.notification_count += 1;
                             notification_state.last_notification_time = Some(now);
                             Self::update_notification_stats_static(status_arc, true).await;
@@ -207,8 +199,10 @@ impl TaskScheduler {
                 }
             }
         }
-
-        // 更新状态
+        if is_healthy {
+            notification_state.consecutive_failures = 0;
+        }
+        // 3. 更新最后健康状态
         notification_state.last_health_status = Some(current_status);
 
         Ok(())
