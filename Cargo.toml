@@ -33,7 +33,9 @@ thiserror = "1.0"
 
 # Logging
 log = "0.4"
-env_logger = "0.10"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time", "chrono"] }
+tracing-log = "0.2"
 
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
@@ -58,7 +60,6 @@ regex = "1.11"
 
 # Futures utilities
 futures = "0.3"
-tracing = "0.1.41"
 
 # Cryptography for Feishu signature
 hmac = "0.12"
