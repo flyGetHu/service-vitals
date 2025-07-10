@@ -260,7 +260,6 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::NamedTempFile;
-    use tokio::time::timeout;
 
     #[tokio::test]
     async fn test_config_watcher_creation() {

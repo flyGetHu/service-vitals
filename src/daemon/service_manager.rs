@@ -335,13 +335,6 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    #[tokio::test]
-    async fn test_service_manager_creation() {
-        let manager = ServiceManager::new();
-        // 测试创建是否成功
-        assert!(true); // 简单的存在性测试
-    }
-
     #[test]
     fn test_config_validation() {
         let manager = ServiceManager::new();

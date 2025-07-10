@@ -330,8 +330,7 @@ mod tests {
     #[test]
     fn test_unix_daemon_manager_creation() {
         let manager = UnixDaemonManager::new();
-        // 测试创建是否成功
-        assert!(manager.use_systemd || !manager.use_systemd); // 总是为真，只是确保创建成功
+        println!("manager: {:?}", manager.use_systemd);
     }
 
     #[test]
