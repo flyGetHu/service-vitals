@@ -175,13 +175,18 @@ pub fn get_default_config_path() -> Result<std::path::PathBuf> {
     // 先检测当前目录是否存在config.toml，不存在则检测~/.config/service-vitals/config.toml
     let mut path = std::path::PathBuf::from("config.toml");
     if path.exists() {
-        return Ok(path);
+        // 保证返回绝对路径
+        return std::env::current_dir()
+            .map(|dir| dir.join(path))
+            .map_err(|e| ConfigError::ParseError(format!("获取当前目录失败: {e}")))
+            .map_err(Into::into);
     } else {
         if let Some(config_dir) = dirs::config_dir() {
             path = config_dir.join("service-vitals").join("config.toml");
         }
         if path.exists() {
-            return Ok(path);
+            // 保证返回绝对路径
+            return Ok(path.canonicalize().unwrap_or(path));
         }
     }
     Err(ConfigError::FileNotFound {
