@@ -239,10 +239,24 @@ async fn start_service_main(
     // 加载配置
     let config_path = args.get_config_path();
     let loader = TomlConfigLoader::new(true);
+
+    // 检查配置文件是否存在
+    if !config_path.exists() {
+        return Err(anyhow::anyhow!(
+            "配置文件不存在: {}\n提示：请运行 'service-vitals init' 创建默认配置文件",
+            config_path.display()
+        ));
+    }
+
     let mut config = loader
         .load_from_file(&config_path)
         .await
-        .with_context(|| format!("加载配置文件失败: {}", config_path.display()))?;
+        .with_context(|| {
+            format!(
+                "加载配置文件失败: {}\n请检查配置文件格式是否正确。参考示例：examples/basic_config.toml",
+                config_path.display()
+            )
+        })?;
 
     // 应用命令行参数覆盖
     if let Some(interval_secs) = interval {

@@ -6,9 +6,8 @@ use log::LevelFilter;
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use tracing_log::LogTracer;
 use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter, Layer};
 
 /// 日志轮转策略
@@ -26,6 +25,30 @@ pub enum LogRotation {
         interval: Duration,
     },
 }
+
+/// 全局日志初始化状态
+#[derive(Debug)]
+struct GlobalLoggingState {
+    /// 是否已初始化
+    initialized: bool,
+    /// 初始化结果
+    init_result: Result<(), String>,
+    /// 当前配置
+    current_config: Option<LogConfig>,
+}
+
+impl Default for GlobalLoggingState {
+    fn default() -> Self {
+        Self {
+            initialized: false,
+            init_result: Ok(()),
+            current_config: None,
+        }
+    }
+}
+
+/// 全局日志状态管理器
+static GLOBAL_LOGGING_STATE: OnceLock<Mutex<GlobalLoggingState>> = OnceLock::new();
 
 /// 日志配置结构
 #[derive(Debug, Clone)]
@@ -201,17 +224,116 @@ impl LoggingSystem {
         }
     }
 
-    /// 初始化日志系统
+    /// 初始化日志系统（现代化实现）
     ///
     /// # 参数
     /// * `config` - 日志配置
     ///
     /// # 返回
     /// * `Result<LoggingSystem, anyhow::Error>` - 初始化结果
+    ///
+    /// # 特性
+    /// - 线程安全的单次初始化
+    /// - 支持测试环境重新初始化
+    /// - 避免使用 unsafe 代码
+    /// - 提供清晰的错误信息
     pub fn setup_logging(config: LogConfig) -> anyhow::Result<Self> {
-        // 设置 log crate 的日志转发到 tracing
-        LogTracer::init().ok(); // 忽略错误，可能已经初始化过了
+        Self::setup_logging_with_options(config, false)
+    }
 
+    /// 初始化日志系统（带选项）
+    ///
+    /// # 参数
+    /// * `config` - 日志配置
+    /// * `force_reinit` - 是否强制重新初始化（主要用于测试）
+    ///
+    /// # 返回
+    /// * `Result<LoggingSystem, anyhow::Error>` - 初始化结果
+    pub fn setup_logging_with_options(
+        config: LogConfig,
+        force_reinit: bool,
+    ) -> anyhow::Result<Self> {
+        // 获取全局状态管理器
+        let state_mutex =
+            GLOBAL_LOGGING_STATE.get_or_init(|| Mutex::new(GlobalLoggingState::default()));
+
+        // 检查是否需要初始化
+        {
+            let state = state_mutex.lock().unwrap();
+            if state.initialized && !force_reinit {
+                // 已经初始化过，检查之前的结果
+                match &state.init_result {
+                    Ok(()) => {
+                        // 之前初始化成功，返回新的 LoggingSystem 实例
+                        let system = Self::new(config.clone());
+
+                        // 启动指标收集任务（如果启用）
+                        if config.enable_metrics {
+                            system.start_metrics_collection(config.metrics_interval);
+                        }
+
+                        return Ok(system);
+                    }
+                    Err(e) => {
+                        // 之前初始化失败，如果不是强制重新初始化，返回错误
+                        if !force_reinit {
+                            return Err(anyhow::anyhow!("日志系统之前初始化失败: {}", e));
+                        }
+                        // 如果是强制重新初始化，继续执行初始化流程
+                    }
+                }
+            }
+        }
+
+        // 执行实际的初始化
+        let init_result = Self::perform_initialization(&config);
+
+        // 更新全局状态
+        {
+            let mut state = state_mutex.lock().unwrap();
+            state.initialized = true;
+            state.current_config = Some(config.clone());
+            state.init_result = init_result.as_ref().map(|_| ()).map_err(|e| e.to_string());
+        }
+
+        // 返回结果
+        let system = Self::new(config.clone());
+
+        // 启动指标收集任务（如果启用）
+        if config.enable_metrics {
+            system.start_metrics_collection(config.metrics_interval);
+        }
+
+        Ok(system)
+    }
+
+    /// 执行实际的日志系统初始化
+    fn perform_initialization(config: &LogConfig) -> anyhow::Result<()> {
+        // 初始化 LogTracer（log crate 到 tracing 的桥接）
+        Self::init_log_tracer()?;
+
+        // 初始化 tracing subscriber
+        Self::init_tracing_subscriber(config)?;
+
+        Ok(())
+    }
+
+    /// 初始化 LogTracer
+    fn init_log_tracer() -> anyhow::Result<()> {
+        use tracing_log::LogTracer;
+
+        static LOG_TRACER_INIT: OnceLock<Result<(), String>> = OnceLock::new();
+
+        let result = LOG_TRACER_INIT.get_or_init(|| LogTracer::init().map_err(|e| e.to_string()));
+
+        result
+            .as_ref()
+            .map_err(|e| anyhow::anyhow!("LogTracer初始化失败: {}", e))?;
+        Ok(())
+    }
+
+    /// 初始化 tracing subscriber
+    fn init_tracing_subscriber(config: &LogConfig) -> anyhow::Result<()> {
         // 创建环境过滤器
         let mut env_filter = EnvFilter::from_default_env()
             .add_directive(Self::convert_level_to_directive(config.level));
@@ -243,13 +365,14 @@ impl LoggingSystem {
                 .boxed()
         };
 
-        // 设置输出目标
+        // 直接尝试初始化，如果失败就忽略（可能已经初始化过了）
         let result = if config.console {
             // 控制台输出
             registry().with(env_filter).with(fmt_layer).try_init()
         } else if let Some(file_path) = &config.file_path {
             // 文件输出 (简单实现，不包含轮转)
-            let file = std::fs::File::create(file_path)?;
+            let file = std::fs::File::create(file_path)
+                .map_err(|e| anyhow::anyhow!("创建日志文件失败: {}", e))?;
             let file_layer = fmt::layer()
                 .with_writer(file)
                 .with_ansi(false)
@@ -262,30 +385,31 @@ impl LoggingSystem {
             registry().with(env_filter).with(fmt_layer).try_init()
         };
 
-        // 忽略重复初始化错误
-        if let Err(e) = result {
-            tracing::warn!("日志系统可能已经初始化: {}", e);
-        }
-
-        let system = Self::new(config.clone());
-
-        // 启动指标收集任务
-        if let Some(ref collector) = system.metrics_collector {
-            let collector_clone = Arc::clone(collector);
-            let interval = config.metrics_interval;
-            tokio::spawn(async move {
-                let mut interval_timer = tokio::time::interval(interval);
-                loop {
-                    interval_timer.tick().await;
-                    Self::log_metrics(&collector_clone).await;
+        // 如果初始化失败，检查是否是因为已经初始化过了
+        match result {
+            Ok(()) => {
+                tracing::info!("日志系统初始化完成");
+                tracing::debug!("日志配置: {:?}", config);
+                Ok(())
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if error_msg.contains(
+                    "attempted to set a logger after the logging system was already initialized",
+                ) || error_msg.contains("a global default trace dispatcher has already been set")
+                {
+                    // 这是预期的错误，说明已经初始化过了
+                    tracing::debug!("日志系统已经初始化过了");
+                    Ok(())
+                } else {
+                    // 其他错误
+                    Err(anyhow::anyhow!(
+                        "tracing subscriber初始化失败: {}",
+                        error_msg
+                    ))
                 }
-            });
+            }
         }
-
-        tracing::info!("日志系统初始化完成");
-        tracing::debug!("日志配置: {:?}", config);
-
-        Ok(system)
     }
 
     /// 将 log::LevelFilter 转换为 tracing 的指令
@@ -316,6 +440,51 @@ impl LoggingSystem {
     /// 获取指标收集器
     pub fn metrics_collector(&self) -> Option<Arc<MetricsCollector>> {
         self.metrics_collector.clone()
+    }
+
+    /// 启动指标收集任务
+    pub fn start_metrics_collection(&self, interval: Duration) {
+        if let Some(ref collector) = self.metrics_collector {
+            let collector_clone = Arc::clone(collector);
+            tokio::spawn(async move {
+                let mut interval_timer = tokio::time::interval(interval);
+                loop {
+                    interval_timer.tick().await;
+                    Self::log_metrics(&collector_clone).await;
+                }
+            });
+        }
+    }
+
+    /// 检查日志系统是否已初始化
+    pub fn is_initialized() -> bool {
+        if let Some(state_mutex) = GLOBAL_LOGGING_STATE.get() {
+            let state = state_mutex.lock().unwrap();
+            state.initialized
+        } else {
+            false
+        }
+    }
+
+    /// 获取当前日志配置（如果已初始化）
+    pub fn current_config() -> Option<LogConfig> {
+        if let Some(state_mutex) = GLOBAL_LOGGING_STATE.get() {
+            let state = state_mutex.lock().unwrap();
+            state.current_config.clone()
+        } else {
+            None
+        }
+    }
+
+    /// 重置日志系统状态（主要用于测试）
+    #[cfg(test)]
+    pub fn reset_for_testing() {
+        if let Some(state_mutex) = GLOBAL_LOGGING_STATE.get() {
+            let mut state = state_mutex.lock().unwrap();
+            state.initialized = false;
+            state.init_result = Ok(());
+            state.current_config = None;
+        }
     }
 
     /// 记录审计日志

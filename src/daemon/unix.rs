@@ -150,13 +150,35 @@ WantedBy=multi-user.target
         match fs::read_to_string(pid_file) {
             Ok(pid_str) => {
                 if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                    // 检查进程是否存在
-                    unsafe { libc::kill(pid, 0) == 0 }
+                    // 使用更安全的方式检查进程是否存在
+                    self.check_process_exists_safe(pid)
                 } else {
                     false
                 }
             }
             Err(_) => false,
+        }
+    }
+
+    /// 安全地检查进程是否存在
+    fn check_process_exists_safe(&self, pid: i32) -> bool {
+        // 验证PID的有效性
+        if pid <= 0 {
+            return false;
+        }
+
+        // 使用更安全的方式检查进程
+        match std::fs::read_to_string(format!("/proc/{}/stat", pid)) {
+            Ok(_) => true, // 如果能读取/proc/PID/stat，说明进程存在
+            Err(_) => {
+                // 如果/proc不可用，回退到signal方式，但增加安全检查
+                if pid > 65535 {
+                    // 避免过大的PID值
+                    return false;
+                }
+                // 只有在必要时才使用unsafe
+                unsafe { libc::kill(pid, 0) == 0 }
+            }
         }
     }
 

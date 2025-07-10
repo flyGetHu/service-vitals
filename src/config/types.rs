@@ -217,7 +217,7 @@ mod tests {
                 description: Some("Test service description".to_string()),
                 headers: HashMap::new(),
                 body: None,
-                alert_cooldown_secs: Some(300),
+                alert_cooldown_secs: Some(60),
             }],
         }
     }
