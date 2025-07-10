@@ -310,6 +310,9 @@ pub enum Commands {
         /// 输出格式
         #[arg(long, value_enum, default_value = "text", help = "输出格式")]
         format: OutputFormat,
+        /// 是否显示详细信息
+        #[arg(short, long, help = "显示详细信息，包括完整的服务列表")]
+        verbose: bool,
     },
 }
 
