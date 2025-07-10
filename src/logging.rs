@@ -8,10 +8,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tracing_subscriber::{
-    fmt, prelude::*, registry, EnvFilter, Layer,
-};
 use tracing_log::LogTracer;
+use tracing_subscriber::{fmt, prelude::*, registry, EnvFilter, Layer};
 
 /// 日志轮转策略
 #[derive(Debug, Clone)]
@@ -248,10 +246,7 @@ impl LoggingSystem {
         // 设置输出目标
         let result = if config.console {
             // 控制台输出
-            registry()
-                .with(env_filter)
-                .with(fmt_layer)
-                .try_init()
+            registry().with(env_filter).with(fmt_layer).try_init()
         } else if let Some(file_path) = &config.file_path {
             // 文件输出 (简单实现，不包含轮转)
             let file = std::fs::File::create(file_path)?;
@@ -261,16 +256,10 @@ impl LoggingSystem {
                 .with_file(true)
                 .with_line_number(true);
 
-            registry()
-                .with(env_filter)
-                .with(file_layer)
-                .try_init()
+            registry().with(env_filter).with(file_layer).try_init()
         } else {
             // 默认控制台输出
-            registry()
-                .with(env_filter)
-                .with(fmt_layer)
-                .try_init()
+            registry().with(env_filter).with(fmt_layer).try_init()
         };
 
         // 忽略重复初始化错误

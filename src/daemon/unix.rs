@@ -5,11 +5,11 @@
 use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus};
 use crate::error::{Result, ServiceVitalsError};
 use async_trait::async_trait;
-use tracing::{debug, error, info, warn};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use tokio::process::Command as AsyncCommand;
+use tracing::{debug, error, info, warn};
 
 /// Unix守护进程管理器
 pub struct UnixDaemonManager {

@@ -3,8 +3,8 @@
 //! 使用clap定义应用程序的命令行接口
 
 use clap::{Parser, Subcommand, ValueEnum};
-use tracing::error;
 use std::path::PathBuf;
+use tracing::error;
 
 /// Service Vitals - 跨平台服务健康监控工具
 #[derive(Parser, Debug, Clone)]

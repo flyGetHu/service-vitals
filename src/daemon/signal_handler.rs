@@ -3,8 +3,8 @@
 //! 提供Linux/Unix信号处理和优雅关闭支持
 
 use crate::error::Result;
-use tracing::{error, info, warn};
 use tokio::sync::broadcast;
+use tracing::{error, info, warn};
 
 #[cfg(unix)]
 use signal_hook::consts::{SIGINT, SIGTERM, SIGUSR1};

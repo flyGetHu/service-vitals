@@ -6,8 +6,8 @@
 use crate::daemon::PlatformDaemonManager;
 use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus};
 use crate::error::Result;
-use tracing::{error, info};
 use serde::{Deserialize, Serialize};
+use tracing::{error, info};
 
 /// 服务管理器
 #[cfg(unix)]
