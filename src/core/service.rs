@@ -17,8 +17,8 @@ use tokio::signal;
 use tokio::sync::broadcast;
 use tracing::{error, info};
 
-use crate::daemon_service::DaemonService;
-use crate::foreground_service::ForegroundService;
+use crate::core::daemon_service::DaemonService;
+use crate::core::foreground_service::ForegroundService;
 
 /// 服务管理器
 pub struct ServiceManager;

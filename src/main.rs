@@ -2,7 +2,7 @@
 //!
 //! 跨平台服务健康监控工具
 
-use service_vitals::app;
+use service_vitals::core::app;
 
 #[tokio::main]
 async fn main() {

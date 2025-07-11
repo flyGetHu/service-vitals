@@ -1,60 +1,49 @@
-//! 守护进程服务模块
+//! 前台服务模块
 //!
-//! 处理守护进程模式的启动和管理
+//! 处理前台模式的启动和信号处理
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use service_vitals::cli::args::Args;
-use service_vitals::daemon::{DaemonConfig, DaemonRuntime};
-use service_vitals::service::{ServiceLauncher, ServiceComponents};
+use service_vitals::core::service::ServiceLauncher;
+use tokio::signal;
 use tokio::sync::broadcast;
 use tracing::{error, info};
 
-/// 守护进程服务
-pub struct DaemonService;
+/// 前台服务
+pub struct ForegroundService;
 
-impl DaemonService {
-    /// 创建新的守护进程服务
+impl ForegroundService {
+    /// 创建新的前台服务
     pub fn new() -> Self {
         Self
     }
 
-    /// 启动守护进程模式
+    /// 启动前台模式
     pub async fn start(
         &self,
         args: &Args,
         interval: Option<u64>,
         max_concurrent: Option<usize>,
     ) -> Result<()> {
-        info!("以守护进程模式启动服务...");
+        info!("以前台模式启动服务...");
 
-        // 创建守护进程配置
-        let mut daemon_config = if args.workdir.is_some() || args.pid_file.is_some() {
-            DaemonConfig::for_development()
-        } else {
-            DaemonConfig::default()
-        };
+        let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
 
-        // 应用命令行参数覆盖
-        daemon_config.config_path = args.get_config_path();
-        if let Some(ref workdir) = args.workdir {
-            daemon_config.working_directory = workdir.clone();
-        }
-        if let Some(ref pid_file) = args.pid_file {
-            daemon_config.pid_file = Some(pid_file.clone());
-        }
+        // 设置Ctrl+C信号处理
+        let shutdown_tx_clone = shutdown_tx.clone();
+        tokio::spawn(async move {
+            match signal::ctrl_c().await {
+                Ok(()) => {
+                    info!("收到中断信号，正在停止服务...");
+                    let _ = shutdown_tx_clone.send(());
+                }
+                Err(err) => {
+                    error!("监听中断信号失败: {}", err);
+                }
+            }
+        });
 
-        // 创建守护进程运行时
-        let mut daemon_runtime = DaemonRuntime::new(daemon_config);
-
-        // 启动守护进程
-        daemon_runtime
-            .run(|shutdown_rx| async move {
-                self.run_service_main(args, interval, max_concurrent, shutdown_rx)
-                    .await
-                    .map_err(|e| service_vitals::error::ServiceVitalsError::DaemonError(e.to_string()))
-            })
-            .await
-            .context("守护进程运行失败")
+        self.run_service_main(args, interval, max_concurrent, shutdown_rx).await
     }
 
     /// 运行服务主逻辑
@@ -92,7 +81,7 @@ impl DaemonService {
     }
 }
 
-impl Default for DaemonService {
+impl Default for ForegroundService {
     fn default() -> Self {
         Self::new()
     }

@@ -11,7 +11,7 @@ use service_vitals::cli::commands::{
     TestNotificationCommand, UninstallCommand, ValidateCommand, VersionCommand,
 };
 use service_vitals::logging::{LogConfig, LoggingSystem};
-use service_vitals::service::ServiceManager;
+use service_vitals::core::service::ServiceManager;
 use std::time::Duration;
 use tracing::{error, info};
 
