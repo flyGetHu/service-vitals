@@ -17,6 +17,12 @@ pub mod notification;
 pub mod status;
 pub mod web;
 
+// 新增的模块
+pub mod app;
+pub mod service;
+pub mod daemon_service;
+pub mod foreground_service;
+
 // 重新导出主要类型
 pub use config::{Config, GlobalConfig, ServiceConfig};
 pub use error::ServiceVitalsError;

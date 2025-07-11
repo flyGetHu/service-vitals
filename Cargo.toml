@@ -90,3 +90,15 @@ tempfile = "3.20"
 mockito = "1.7"
 criterion = "0.5"
 serial_test = "3.2"
+
+[[bench]]
+name = "health_checker"
+harness = false
+
+[[bench]]
+name = "config_processing"
+harness = false
+
+[[bench]]
+name = "notification"
+harness = false
