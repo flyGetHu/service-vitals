@@ -7,19 +7,23 @@
 //! - 多平台守护进程支持
 //! - 结构化日志记录
 
+// 核心功能模块
 pub mod cli;
 pub mod config;
 pub mod daemon;
-pub mod error;
 pub mod health;
-pub mod logging;
 pub mod notification;
-pub mod status;
 pub mod web;
+
+// 核心应用程序模块
+pub mod core;
+
+// 通用功能模块
+pub mod common;
 
 // 重新导出主要类型
 pub use config::{Config, GlobalConfig, ServiceConfig};
-pub use error::ServiceVitalsError;
+pub use common::error::ServiceVitalsError;
 pub use health::{HealthChecker, HealthResult, HealthStatus};
 
 /// 应用程序版本信息
