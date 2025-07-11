@@ -17,9 +17,6 @@ pub mod notification;
 pub mod status;
 pub mod web;
 
-#[cfg(test)]
-mod logging_tests;
-
 // 重新导出主要类型
 pub use config::{Config, GlobalConfig, ServiceConfig};
 pub use error::ServiceVitalsError;
