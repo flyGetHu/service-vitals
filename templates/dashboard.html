@@ -405,29 +405,53 @@
           "
         >
           <h2 style="margin: 0; color: #374151">服务状态</h2>
-          <div>
-            <label
-              style="
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                cursor: pointer;
-              "
-            >
-              <input
-                type="checkbox"
-                id="show-problems-only"
-                {%
-                if
-                show_problems_only
-                %}checked{%
-                endif
-                %}
-              />
-              <span style="font-size: 0.9rem; color: #6b7280"
-                >只显示离线服务</span
+          <div style="display: flex; gap: 16px; align-items: center">
+            <!-- 排序选择器 -->
+            <div>
+              <label style="display: flex; align-items: center; gap: 8px">
+                <span style="font-size: 0.9rem; color: #6b7280">排序方式:</span>
+                <select
+                  id="sort-selector"
+                  style="
+                    padding: 4px 8px;
+                    border: 1px solid #d1d5db;
+                    border-radius: 4px;
+                    font-size: 0.9rem;
+                    background: white;
+                  "
+                >
+                  <option value="name">按名称</option>
+                  <option value="status">按状态</option>
+                  <option value="response_time" selected>按响应时间</option>
+                </select>
+              </label>
+            </div>
+
+            <!-- 过滤器 -->
+            <div>
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                  cursor: pointer;
+                "
               >
-            </label>
+                <input
+                  type="checkbox"
+                  id="show-problems-only"
+                  {%
+                  if
+                  show_problems_only
+                  %}checked{%
+                  endif
+                  %}
+                />
+                <span style="font-size: 0.9rem; color: #6b7280"
+                  >只显示离线服务</span
+                >
+              </label>
+            </div>
           </div>
         </div>
         <div class="services-grid" id="services-grid">
@@ -488,6 +512,7 @@
       let refreshInterval = 3000; // 默认3秒
       let refreshTimer = null;
       let showProblemsOnly = false;
+      let currentSortBy = "response_time"; // 默认按响应时间排序
 
       // 显示/隐藏加载指示器
       function showLoading(show) {
@@ -536,15 +561,65 @@
         )}`;
       }
 
+      // 排序服务列表
+      function sortServices(services, sortBy) {
+        const sortedServices = [...services];
+
+        switch (sortBy) {
+          case "name":
+            sortedServices.sort((a, b) => a.name.localeCompare(b.name));
+            break;
+          case "status":
+            // 按状态优先级排序：Offline > Unknown > Online
+            const statusPriority = { Offline: 0, Unknown: 1, Online: 2 };
+            sortedServices.sort((a, b) => {
+              const priorityA = statusPriority[a.status] ?? 3;
+              const priorityB = statusPriority[b.status] ?? 3;
+              if (priorityA !== priorityB) {
+                return priorityA - priorityB;
+              }
+              // 相同状态按名称排序
+              return a.name.localeCompare(b.name);
+            });
+            break;
+          case "response_time":
+            // 按响应时间倒序排列（响应时间长的排在前面）
+            sortedServices.sort((a, b) => {
+              const timeA = a.response_time_ms ?? 0;
+              const timeB = b.response_time_ms ?? 0;
+
+              // 如果一个有响应时间，一个没有，没有的排在后面
+              if (timeA === 0 && timeB > 0) return 1;
+              if (timeB === 0 && timeA > 0) return -1;
+              if (timeA === 0 && timeB === 0) {
+                // 都没有响应时间，按名称排序
+                return a.name.localeCompare(b.name);
+              }
+
+              // 都有响应时间，按倒序排列（时间长的在前）
+              return timeB - timeA;
+            });
+            break;
+          default:
+            // 默认按名称排序
+            sortedServices.sort((a, b) => a.name.localeCompare(b.name));
+        }
+
+        return sortedServices;
+      }
+
       // 更新服务卡片
       function updateServicesGrid(services) {
         const grid = document.getElementById("services-grid");
         grid.innerHTML = "";
 
-        // 根据前端过滤器状态过滤服务
-        let filteredServices = services;
+        // 1. 先排序
+        let sortedServices = sortServices(services, currentSortBy);
+
+        // 2. 再过滤
+        let filteredServices = sortedServices;
         if (showProblemsOnly) {
-          filteredServices = services.filter(
+          filteredServices = sortedServices.filter(
             (service) =>
               service.status === "Offline" || service.status === "Unknown"
           );
@@ -725,6 +800,16 @@
           filterCheckbox.addEventListener("change", function () {
             showProblemsOnly = this.checked;
             fetchData(); // 重新获取数据以应用过滤
+          });
+        }
+
+        // 初始化排序选择器
+        const sortSelector = document.getElementById("sort-selector");
+        if (sortSelector) {
+          currentSortBy = sortSelector.value;
+          sortSelector.addEventListener("change", function () {
+            currentSortBy = this.value;
+            fetchData(); // 重新获取数据以应用新的排序
           });
         }
 

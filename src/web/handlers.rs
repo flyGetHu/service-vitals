@@ -111,8 +111,14 @@ pub async fn api_status(State(app_state): State<WebAppState>) -> impl IntoRespon
         }
     }
 
-    // API 端点总是返回所有服务，让前端决定如何过滤
-    for service in services_map.values() {
+    // API 端点总是返回所有服务，让前端决定如何过滤和排序
+    // 将服务转换为Vec以便后续可能的排序需求
+    let mut services_vec: Vec<_> = services_map.values().collect();
+
+    // 按服务名称排序以确保一致的默认顺序
+    services_vec.sort_by(|a, b| a.name.cmp(&b.name));
+
+    for service in services_vec {
         services.push(ApiServiceStatus {
             name: service.name.clone(),
             url: service.url.clone(),
