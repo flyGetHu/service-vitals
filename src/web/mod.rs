@@ -28,17 +28,6 @@ pub enum WebError {
     ServerStartError { message: String },
 }
 
-/// 服务状态历史记录
-#[derive(Debug, Clone)]
-pub struct StatusHistory {
-    /// 时间戳
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    /// 状态
-    pub status: String,
-    /// 响应时间（毫秒）
-    pub response_time_ms: Option<u64>,
-}
-
 /// Web 服务器状态数据
 #[derive(Debug, Clone)]
 pub struct WebServiceStatus {
@@ -52,8 +41,8 @@ pub struct WebServiceStatus {
     pub response_time_ms: Option<u64>,
     /// 最后检查时间
     pub last_check: Option<chrono::DateTime<chrono::Utc>>,
-    /// 状态历史记录（最近10次）
-    pub history: Vec<StatusHistory>,
+    /// 错误信息（当状态为 Offline 或 Unknown 时）
+    pub error_message: Option<String>,
 }
 
 /// 共享的 Web 状态数据
@@ -179,7 +168,7 @@ impl WebServer {
                     status: "Unknown".to_string(),
                     response_time_ms: None,
                     last_check: None,
-                    history: Vec::new(),
+                    error_message: None,
                 });
 
         // 更新当前状态
@@ -189,23 +178,16 @@ impl WebServer {
             "Offline"
         };
 
-        // 如果状态发生变化，添加到历史记录
-        if web_status.status != new_status {
-            web_status.history.push(StatusHistory {
-                timestamp: chrono::Utc::now(),
-                status: new_status.to_string(),
-                response_time_ms: status.response_time_ms,
-            });
-
-            // 保持最近10条记录
-            if web_status.history.len() > 10 {
-                web_status.history.remove(0);
-            }
-        }
-
         web_status.status = new_status.to_string();
         web_status.response_time_ms = status.response_time_ms;
         web_status.last_check = Some(chrono::Utc::now());
+
+        // 更新错误信息：只有在服务离线或未知状态时才保留错误信息
+        web_status.error_message = if new_status == "Offline" {
+            status.error_message.clone()
+        } else {
+            None
+        };
 
         if !status.url.is_empty() {
             web_status.url = status.url;
@@ -296,9 +278,8 @@ mod tests {
         let web_status = state_guard.get("test-service").unwrap();
 
         assert_eq!(web_status.status, "Offline");
-        assert_eq!(web_status.history.len(), 2); // 应该有两条历史记录：Unknown->Online, Online->Offline
-        assert_eq!(web_status.history[0].status, "Online");
-        assert_eq!(web_status.history[1].status, "Offline");
+        assert!(web_status.error_message.is_some()); // 离线状态应该有错误信息
+        assert_eq!(web_status.error_message.as_ref().unwrap(), "Service down");
     }
 
     #[test]

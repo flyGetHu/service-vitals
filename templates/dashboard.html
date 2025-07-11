@@ -223,38 +223,20 @@
         line-height: 1.4;
       }
 
-      .history {
-        margin-top: 15px;
-        padding: 12px;
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-      }
-
-      .history-title {
+      .error-title {
         font-size: 0.8rem;
         font-weight: 600;
-        color: #374151;
+        color: #991b1b;
         margin-bottom: 8px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
 
-      .history-item {
-        margin: 6px 0;
-        color: #6b7280;
-        font-size: 0.8rem;
-        padding: 4px 0;
-        border-bottom: 1px solid #f1f5f9;
-      }
-
-      .history-item:last-child {
-        border-bottom: none;
-      }
-
-      .history-time {
-        color: #9ca3af;
-        font-size: 0.75rem;
+      .error-content {
+        color: #991b1b;
+        font-size: 0.85rem;
+        line-height: 1.4;
+        word-break: break-word;
       }
 
       .auto-refresh {
@@ -290,7 +272,7 @@
         }
       }
 
-      .error-message {
+      .page-error-message {
         background-color: #fee2e2;
         color: #991b1b;
         padding: 10px;
@@ -379,7 +361,7 @@
     </div>
 
     <div class="container">
-      <div class="error-message" id="error-message"></div>
+      <div class="page-error-message" id="error-message"></div>
 
       <div class="header">
         <h1>Service Vitals</h1>
@@ -483,19 +465,13 @@
               </div>
             </div>
 
-            {% if !service.history.is_empty() %}
-            <div class="history">
-              <div class="history-title">状态历史</div>
-              {% for history in service.history %}
-              <div class="history-item">
-                <span class="history-time"
-                  >{{ history.timestamp.format("%H:%M:%S") }}</span
-                >
-                - {{ history.status }} {% match history.response_time_ms %} {%
-                when Some with (rt) %} ({{ rt }}ms) {% when None %} {% endmatch
-                %}
+            {% if service.error_message.is_some() && (service.status ==
+            "Offline" || service.status == "Unknown") %}
+            <div class="error-message">
+              <div class="error-title">错误详情</div>
+              <div class="error-content">
+                {{ service.error_message.as_ref().unwrap() }}
               </div>
-              {% endfor %}
             </div>
             {% endif %}
           </div>
@@ -578,29 +554,16 @@
           const card = document.createElement("div");
           card.className = `service-card ${service.status.toLowerCase()} fade-in`;
 
-          // 构建历史记录HTML
-          let historyHtml = "";
-          if (service.history && service.history.length > 0) {
-            historyHtml = `
-                      <div class="history">
-                          <div class="history-title">状态历史</div>
-                          ${service.history
-                            .map(
-                              (h) => `
-                              <div class="history-item">
-                                  <span class="history-time">${formatTime(
-                                    h.timestamp
-                                  )}</span>
-                                  - ${h.status}
-                                  ${
-                                    h.response_time_ms
-                                      ? ` (${h.response_time_ms}ms)`
-                                      : ""
-                                  }
-                              </div>
-                          `
-                            )
-                            .join("")}
+          // 构建错误详情HTML
+          let errorHtml = "";
+          if (
+            service.error_message &&
+            (service.status === "Offline" || service.status === "Unknown")
+          ) {
+            errorHtml = `
+                      <div class="error-message">
+                          <div class="error-title">错误详情</div>
+                          <div class="error-content">${service.error_message}</div>
                       </div>
                   `;
           }
@@ -643,7 +606,7 @@
                       </div>
                   </div>
 
-                  ${historyHtml}
+                  ${errorHtml}
               `;
 
           grid.appendChild(card);

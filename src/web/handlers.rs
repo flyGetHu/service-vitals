@@ -43,15 +43,7 @@ struct ApiServiceStatus {
     status: String,
     response_time_ms: Option<u64>,
     last_check: Option<String>,
-    history: Vec<ApiStatusHistory>,
-}
-
-/// API 状态历史结构
-#[derive(serde::Serialize)]
-struct ApiStatusHistory {
-    timestamp: String,
-    status: String,
-    response_time_ms: Option<u64>,
+    error_message: Option<String>,
 }
 
 /// 仪表板页面处理函数
@@ -127,15 +119,7 @@ pub async fn api_status(State(app_state): State<WebAppState>) -> impl IntoRespon
             status: service.status.clone(),
             response_time_ms: service.response_time_ms,
             last_check: service.last_check.map(|dt| dt.to_rfc3339()),
-            history: service
-                .history
-                .iter()
-                .map(|h| ApiStatusHistory {
-                    timestamp: h.timestamp.to_rfc3339(),
-                    status: h.status.clone(),
-                    response_time_ms: h.response_time_ms,
-                })
-                .collect(),
+            error_message: service.error_message.clone(),
         });
     }
 
@@ -161,7 +145,7 @@ pub async fn api_status(State(app_state): State<WebAppState>) -> impl IntoRespon
 mod tests {
     use super::*;
     use crate::config::types::WebConfig;
-    use crate::web::{StatusHistory, WebServiceStatus};
+    use crate::web::WebServiceStatus;
     use std::collections::HashMap;
     use std::sync::Arc;
     use tokio::sync::RwLock;
@@ -178,11 +162,7 @@ mod tests {
                 status: "Online".to_string(),
                 response_time_ms: Some(150),
                 last_check: Some(chrono::Utc::now()),
-                history: vec![StatusHistory {
-                    timestamp: chrono::Utc::now(),
-                    status: "Online".to_string(),
-                    response_time_ms: Some(150),
-                }],
+                error_message: None,
             },
         );
 
@@ -211,7 +191,7 @@ mod tests {
                 status: "Online".to_string(),
                 response_time_ms: Some(150),
                 last_check: Some(chrono::Utc::now()),
-                history: vec![],
+                error_message: None,
             },
         );
 
@@ -239,7 +219,7 @@ mod tests {
                 status: "Online".to_string(),
                 response_time_ms: Some(150),
                 last_check: Some(chrono::Utc::now()),
-                history: vec![],
+                error_message: None,
             },
         );
         test_data.insert(
@@ -250,7 +230,7 @@ mod tests {
                 status: "Offline".to_string(),
                 response_time_ms: None,
                 last_check: Some(chrono::Utc::now()),
-                history: vec![],
+                error_message: Some("Connection refused".to_string()),
             },
         );
 
@@ -281,7 +261,7 @@ mod tests {
                 status: "Online".to_string(),
                 response_time_ms: Some(150),
                 last_check: Some(chrono::Utc::now()),
-                history: vec![],
+                error_message: None,
             },
         );
         test_data.insert(
@@ -292,7 +272,7 @@ mod tests {
                 status: "Offline".to_string(),
                 response_time_ms: None,
                 last_check: Some(chrono::Utc::now()),
-                history: vec![],
+                error_message: Some("Service unavailable".to_string()),
             },
         );
 
@@ -344,7 +324,7 @@ mod tests {
                 status: "Online".to_string(),
                 response_time_ms: Some(150),
                 last_check: Some(chrono::Utc::now()),
-                history: vec![],
+                error_message: None,
             },
         );
         test_data.insert(
@@ -355,7 +335,7 @@ mod tests {
                 status: "Online".to_string(),
                 response_time_ms: Some(200),
                 last_check: Some(chrono::Utc::now()),
-                history: vec![],
+                error_message: None,
             },
         );
         test_data.insert(
@@ -366,7 +346,7 @@ mod tests {
                 status: "Offline".to_string(),
                 response_time_ms: None,
                 last_check: Some(chrono::Utc::now()),
-                history: vec![],
+                error_message: Some("HTTP 500 Internal Server Error".to_string()),
             },
         );
         test_data.insert(
@@ -377,7 +357,7 @@ mod tests {
                 status: "Unknown".to_string(),
                 response_time_ms: None,
                 last_check: Some(chrono::Utc::now()),
-                history: vec![],
+                error_message: Some("DNS resolution failed".to_string()),
             },
         );
 
