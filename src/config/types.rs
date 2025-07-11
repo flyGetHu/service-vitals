@@ -138,6 +138,42 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
         ));
     }
 
+    // 验证Web配置（如果启用）
+    if let Some(ref web_config) = config.global.web {
+        if web_config.enabled {
+            // 验证端口范围
+            if web_config.port == 0 {
+                return Err(format!(
+                    "无效的Web服务器端口: {}，端口不能为0",
+                    web_config.port
+                ));
+            }
+
+            // 验证绑定地址
+            if web_config.bind_address.is_empty() {
+                return Err("Web服务器绑定地址不能为空".to_string());
+            }
+
+            // 验证布局类型
+            let valid_layout_types = ["cards", "table"];
+            if !valid_layout_types.contains(&web_config.layout_type.as_str()) {
+                return Err(format!(
+                    "无效的界面布局类型: {}，支持的类型: {:?}",
+                    web_config.layout_type, valid_layout_types
+                ));
+            }
+
+            // 验证刷新间隔
+            if web_config.refresh_interval_seconds == 0 {
+                return Err("Web界面刷新间隔不能为0秒".to_string());
+            }
+
+            if web_config.refresh_interval_seconds > 300 {
+                return Err("Web界面刷新间隔不能超过300秒".to_string());
+            }
+        }
+    }
+
     // 验证服务配置
     if config.services.is_empty() {
         return Err("至少需要配置一个服务".to_string());
@@ -222,6 +258,23 @@ mod tests {
                 body: None,
                 alert_cooldown_secs: Some(60),
             }],
+        }
+    }
+
+    fn create_test_service() -> ServiceConfig {
+        ServiceConfig {
+            name: "Test Service".to_string(),
+            url: "https://example.com/health".to_string(),
+            method: "GET".to_string(),
+            expected_status_codes: vec![200],
+            feishu_webhook_url: None,
+            failure_threshold: 1,
+            check_interval_seconds: None,
+            enabled: true,
+            description: Some("Test service description".to_string()),
+            headers: HashMap::new(),
+            body: None,
+            alert_cooldown_secs: Some(60),
         }
     }
 
@@ -311,6 +364,166 @@ mod tests {
         assert_eq!(global_config.retry_attempts, 3);
         assert_eq!(global_config.retry_delay_seconds, 5);
     }
+
+    #[test]
+    fn test_web_config_default() {
+        let web_config = WebConfig::default();
+
+        assert!(!web_config.enabled);
+        assert_eq!(web_config.port, 8080);
+        assert_eq!(web_config.bind_address, "0.0.0.0");
+        assert!(!web_config.show_problems_only);
+        assert_eq!(web_config.layout_type, "cards");
+        assert_eq!(web_config.refresh_interval_seconds, 3);
+    }
+
+    #[test]
+    fn test_web_config_validation_valid() {
+        let config = Config {
+            global: GlobalConfig {
+                default_feishu_webhook_url: None,
+                message_template: None,
+                check_interval_seconds: 60,
+                log_level: "info".to_string(),
+                request_timeout_seconds: 10,
+                max_concurrent_checks: 50,
+                retry_attempts: 3,
+                retry_delay_seconds: 5,
+                headers: HashMap::new(),
+                web: Some(WebConfig {
+                    enabled: true,
+                    port: 8080,
+                    bind_address: "127.0.0.1".to_string(),
+                    show_problems_only: false,
+                    layout_type: "cards".to_string(),
+                    refresh_interval_seconds: 5,
+                }),
+            },
+            services: vec![create_test_service()],
+        };
+
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn test_web_config_validation_invalid_port() {
+        let config = Config {
+            global: GlobalConfig {
+                default_feishu_webhook_url: None,
+                message_template: None,
+                check_interval_seconds: 60,
+                log_level: "info".to_string(),
+                request_timeout_seconds: 10,
+                max_concurrent_checks: 50,
+                retry_attempts: 3,
+                retry_delay_seconds: 5,
+                headers: HashMap::new(),
+                web: Some(WebConfig {
+                    enabled: true,
+                    port: 0,
+                    bind_address: "127.0.0.1".to_string(),
+                    show_problems_only: false,
+                    layout_type: "cards".to_string(),
+                    refresh_interval_seconds: 5,
+                }),
+            },
+            services: vec![create_test_service()],
+        };
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("端口不能为0"));
+    }
+
+    #[test]
+    fn test_web_config_validation_invalid_layout() {
+        let config = Config {
+            global: GlobalConfig {
+                default_feishu_webhook_url: None,
+                message_template: None,
+                check_interval_seconds: 60,
+                log_level: "info".to_string(),
+                request_timeout_seconds: 10,
+                max_concurrent_checks: 50,
+                retry_attempts: 3,
+                retry_delay_seconds: 5,
+                headers: HashMap::new(),
+                web: Some(WebConfig {
+                    enabled: true,
+                    port: 8080,
+                    bind_address: "127.0.0.1".to_string(),
+                    show_problems_only: false,
+                    layout_type: "invalid".to_string(),
+                    refresh_interval_seconds: 5,
+                }),
+            },
+            services: vec![create_test_service()],
+        };
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("无效的界面布局类型"));
+    }
+
+    #[test]
+    fn test_web_config_validation_invalid_refresh_interval() {
+        let config = Config {
+            global: GlobalConfig {
+                default_feishu_webhook_url: None,
+                message_template: None,
+                check_interval_seconds: 60,
+                log_level: "info".to_string(),
+                request_timeout_seconds: 10,
+                max_concurrent_checks: 50,
+                retry_attempts: 3,
+                retry_delay_seconds: 5,
+                headers: HashMap::new(),
+                web: Some(WebConfig {
+                    enabled: true,
+                    port: 8080,
+                    bind_address: "127.0.0.1".to_string(),
+                    show_problems_only: false,
+                    layout_type: "cards".to_string(),
+                    refresh_interval_seconds: 0,
+                }),
+            },
+            services: vec![create_test_service()],
+        };
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("刷新间隔不能为0秒"));
+    }
+
+    #[test]
+    fn test_web_config_validation_refresh_interval_too_long() {
+        let config = Config {
+            global: GlobalConfig {
+                default_feishu_webhook_url: None,
+                message_template: None,
+                check_interval_seconds: 60,
+                log_level: "info".to_string(),
+                request_timeout_seconds: 10,
+                max_concurrent_checks: 50,
+                retry_attempts: 3,
+                retry_delay_seconds: 5,
+                headers: HashMap::new(),
+                web: Some(WebConfig {
+                    enabled: true,
+                    port: 8080,
+                    bind_address: "127.0.0.1".to_string(),
+                    show_problems_only: false,
+                    layout_type: "cards".to_string(),
+                    refresh_interval_seconds: 400,
+                }),
+            },
+            services: vec![create_test_service()],
+        };
+
+        let result = validate_config(&config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("刷新间隔不能超过300秒"));
+    }
 }
 
 /// Web 服务器配置结构
@@ -325,6 +538,15 @@ pub struct WebConfig {
     /// 绑定地址
     #[serde(default = "default_web_bind_address")]
     pub bind_address: String,
+    /// 是否只显示问题服务（离线/不可用）
+    #[serde(default = "default_show_problems_only")]
+    pub show_problems_only: bool,
+    /// 界面布局类型
+    #[serde(default = "default_layout_type")]
+    pub layout_type: String,
+    /// 自动刷新间隔（秒）
+    #[serde(default = "default_refresh_interval")]
+    pub refresh_interval_seconds: u32,
 }
 
 impl Default for WebConfig {
@@ -333,6 +555,9 @@ impl Default for WebConfig {
             enabled: default_web_enabled(),
             port: default_web_port(),
             bind_address: default_web_bind_address(),
+            show_problems_only: default_show_problems_only(),
+            layout_type: default_layout_type(),
+            refresh_interval_seconds: default_refresh_interval(),
         }
     }
 }
@@ -350,4 +575,19 @@ fn default_web_port() -> u16 {
 /// 默认 Web 服务器绑定地址
 fn default_web_bind_address() -> String {
     "0.0.0.0".to_string()
+}
+
+/// 默认是否只显示问题服务
+fn default_show_problems_only() -> bool {
+    false
+}
+
+/// 默认界面布局类型
+fn default_layout_type() -> String {
+    "cards".to_string()
+}
+
+/// 默认自动刷新间隔（秒）
+fn default_refresh_interval() -> u32 {
+    3
 }

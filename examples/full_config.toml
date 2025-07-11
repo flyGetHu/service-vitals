@@ -43,6 +43,9 @@ retry_delay_seconds = 5
 enabled = true
 port = 8080
 bind_address = "0.0.0.0"
+show_problems_only = false
+layout_type = "cards"
+refresh_interval_seconds = 3
 
 # 可选的全局请求头（键值对）
 [global.headers]

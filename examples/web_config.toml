@@ -1,0 +1,74 @@
+# Service Vitals Web监控面板配置示例
+# 展示Web界面的各种配置选项
+
+[global]
+# 基础配置
+check_interval_seconds = 30
+log_level = "info"
+request_timeout_seconds = 10
+max_concurrent_checks = 50
+retry_attempts = 2
+retry_delay_seconds = 5
+
+# Web监控面板配置
+[global.web]
+# 是否启用Web监控面板
+enabled = true
+
+# 监听端口
+port = 8080
+
+# 绑定地址
+# "0.0.0.0" - 监听所有网络接口
+# "127.0.0.1" - 仅监听本地回环接口
+bind_address = "127.0.0.1"
+
+# 是否只显示问题服务（离线/不可用状态）
+# true - 只显示离线和未知状态的服务，隐藏正常运行的服务
+# false - 显示所有服务
+show_problems_only = false
+
+# 界面布局类型
+# "cards" - 卡片式布局（推荐，更现代化）
+# "table" - 表格式布局（传统布局）
+layout_type = "cards"
+
+# 自动刷新间隔（秒）
+# 范围：1-300秒
+# 建议：3-10秒，过短可能影响性能，过长可能错过状态变化
+refresh_interval_seconds = 3
+
+# 服务配置示例
+[[services]]
+name = "主站API"
+description = "主要业务API服务"
+url = "https://api.example.com/health"
+method = "GET"
+expected_status_codes = [200, 201]
+failure_threshold = 2
+enabled = true
+
+[[services]]
+name = "用户服务"
+description = "用户管理微服务"
+url = "https://user-service.example.com/health"
+method = "GET"
+expected_status_codes = [200]
+failure_threshold = 1
+enabled = true
+
+[[services]]
+name = "支付服务"
+description = "支付处理服务"
+url = "https://payment.example.com/status"
+method = "GET"
+expected_status_codes = [200]
+failure_threshold = 3
+enabled = true
+
+# 配置说明：
+# 1. 启用Web面板后，可通过 http://127.0.0.1:8080/dashboard 访问监控面板
+# 2. API端点：http://127.0.0.1:8080/api/v1/status 提供JSON格式的状态数据
+# 3. show_problems_only=true 时，面板只显示有问题的服务，便于快速定位故障
+# 4. cards布局在移动设备上有更好的显示效果
+# 5. 刷新间隔建议根据服务的重要性和变化频率调整

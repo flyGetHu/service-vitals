@@ -59,6 +59,15 @@ pub struct WebServiceStatus {
 /// 共享的 Web 状态数据
 pub type SharedWebState = Arc<RwLock<HashMap<String, WebServiceStatus>>>;
 
+/// Web 应用状态，包含配置和服务状态
+#[derive(Clone)]
+pub struct WebAppState {
+    /// Web 配置
+    pub config: WebConfig,
+    /// 服务状态数据
+    pub services: SharedWebState,
+}
+
 /// Web 服务器结构
 pub struct WebServer {
     /// 配置
@@ -141,6 +150,11 @@ impl WebServer {
 
     /// 创建路由
     fn create_router(&self) -> Router {
+        let app_state = WebAppState {
+            config: self.config.clone(),
+            services: Arc::clone(&self.state),
+        };
+
         Router::new()
             .route("/dashboard", get(handlers::dashboard))
             .route("/api/v1/status", get(handlers::api_status))
@@ -149,7 +163,7 @@ impl WebServer {
                     .layer(TraceLayer::new_for_http())
                     .layer(CorsLayer::permissive()),
             )
-            .with_state(Arc::clone(&self.state))
+            .with_state(app_state)
     }
 
     /// 更新服务状态
@@ -196,5 +210,108 @@ impl WebServer {
         if !status.url.is_empty() {
             web_status.url = status.url;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::types::WebConfig;
+    use crate::health::HealthStatus;
+    use crate::status::ServiceStatus;
+
+    #[tokio::test]
+    async fn test_web_server_creation() {
+        let config = WebConfig::default();
+        let (web_server, _sender) = WebServer::new(config.clone());
+
+        assert_eq!(web_server.config.port, config.port);
+        assert_eq!(web_server.config.bind_address, config.bind_address);
+    }
+
+    #[tokio::test]
+    async fn test_status_update() {
+        let config = WebConfig::default();
+        let (web_server, _sender) = WebServer::new(config);
+
+        let status = ServiceStatus {
+            name: "test-service".to_string(),
+            url: "https://example.com".to_string(),
+            status: HealthStatus::Up,
+            last_check: Some(chrono::Utc::now()),
+            status_code: Some(200),
+            response_time_ms: Some(150),
+            consecutive_failures: 0,
+            error_message: None,
+            enabled: true,
+        };
+
+        WebServer::update_status(web_server.state.clone(), status).await;
+
+        let state_guard = web_server.state.read().await;
+        assert!(state_guard.contains_key("test-service"));
+
+        let web_status = state_guard.get("test-service").unwrap();
+        assert_eq!(web_status.name, "test-service");
+        assert_eq!(web_status.status, "Online");
+        assert_eq!(web_status.response_time_ms, Some(150));
+    }
+
+    #[tokio::test]
+    async fn test_status_history() {
+        let config = WebConfig::default();
+        let (web_server, _sender) = WebServer::new(config);
+
+        // 第一次更新
+        let status1 = ServiceStatus {
+            name: "test-service".to_string(),
+            url: "https://example.com".to_string(),
+            status: HealthStatus::Up,
+            last_check: Some(chrono::Utc::now()),
+            status_code: Some(200),
+            response_time_ms: Some(150),
+            consecutive_failures: 0,
+            error_message: None,
+            enabled: true,
+        };
+
+        WebServer::update_status(web_server.state.clone(), status1).await;
+
+        // 第二次更新（状态变化）
+        let status2 = ServiceStatus {
+            name: "test-service".to_string(),
+            url: "https://example.com".to_string(),
+            status: HealthStatus::Down,
+            last_check: Some(chrono::Utc::now()),
+            status_code: Some(500),
+            response_time_ms: Some(5000),
+            consecutive_failures: 1,
+            error_message: Some("Internal Server Error".to_string()),
+            enabled: true,
+        };
+
+        WebServer::update_status(web_server.state.clone(), status2).await;
+
+        let state_guard = web_server.state.read().await;
+        let web_status = state_guard.get("test-service").unwrap();
+
+        assert_eq!(web_status.status, "Offline");
+        assert_eq!(web_status.history.len(), 2); // 应该有两条历史记录：Unknown->Online, Online->Offline
+        assert_eq!(web_status.history[0].status, "Online");
+        assert_eq!(web_status.history[1].status, "Offline");
+    }
+
+    #[test]
+    fn test_web_app_state_clone() {
+        let config = WebConfig::default();
+        let services = Arc::new(RwLock::new(HashMap::new()));
+
+        let app_state = WebAppState {
+            config: config.clone(),
+            services: services.clone(),
+        };
+
+        let cloned_state = app_state.clone();
+        assert_eq!(cloned_state.config.port, config.port);
     }
 }
