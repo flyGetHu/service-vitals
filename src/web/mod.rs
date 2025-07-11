@@ -6,6 +6,7 @@ pub mod handlers;
 
 use crate::config::types::WebConfig;
 use crate::error::{Result, ServiceVitalsError};
+use crate::health::result::HealthStatus;
 use crate::status::ServiceStatus;
 use axum::{routing::get, Router};
 use std::collections::HashMap;
@@ -172,10 +173,11 @@ impl WebServer {
                 });
 
         // 更新当前状态
-        let new_status = if status.status.is_healthy() {
-            "Online"
-        } else {
-            "Offline"
+        let new_status = match status.status {
+            HealthStatus::Up => "Online",
+            HealthStatus::Down => "Offline",
+            HealthStatus::Unknown => "Unknown",
+            HealthStatus::Degraded => "Offline", // 降级状态视为离线
         };
 
         web_status.status = new_status.to_string();
@@ -183,7 +185,7 @@ impl WebServer {
         web_status.last_check = Some(chrono::Utc::now());
 
         // 更新错误信息：只有在服务离线或未知状态时才保留错误信息
-        web_status.error_message = if new_status == "Offline" {
+        web_status.error_message = if new_status == "Offline" || new_status == "Unknown" {
             status.error_message.clone()
         } else {
             None
@@ -279,7 +281,94 @@ mod tests {
 
         assert_eq!(web_status.status, "Offline");
         assert!(web_status.error_message.is_some()); // 离线状态应该有错误信息
-        assert_eq!(web_status.error_message.as_ref().unwrap(), "Service down");
+        assert_eq!(
+            web_status.error_message.as_ref().unwrap(),
+            "Internal Server Error"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_error_message_propagation() {
+        // 测试错误信息从 ServiceStatus 到 WebServiceStatus 的传递
+        let config = WebConfig::default();
+        let (web_server, _sender) = WebServer::new(config);
+
+        // 创建一个带有错误信息的 ServiceStatus
+        let service_status_with_error = ServiceStatus {
+            name: "test-service".to_string(),
+            url: "https://example.com".to_string(),
+            status: HealthStatus::Down,
+            last_check: Some(chrono::Utc::now()),
+            status_code: Some(500),
+            response_time_ms: Some(1000),
+            consecutive_failures: 1,
+            error_message: Some("HTTP 500 Internal Server Error".to_string()),
+            enabled: true,
+        };
+
+        // 更新状态
+        WebServer::update_status(web_server.state.clone(), service_status_with_error).await;
+
+        // 验证错误信息是否正确传递
+        let state_guard = web_server.state.read().await;
+        let web_status = state_guard.get("test-service").unwrap();
+
+        assert_eq!(web_status.status, "Offline");
+        assert!(web_status.error_message.is_some());
+        assert_eq!(
+            web_status.error_message.as_ref().unwrap(),
+            "HTTP 500 Internal Server Error"
+        );
+
+        // 测试 Unknown 状态也应该保留错误信息
+        drop(state_guard);
+
+        let service_status_unknown = ServiceStatus {
+            name: "test-service-unknown".to_string(),
+            url: "https://example.com".to_string(),
+            status: HealthStatus::Unknown,
+            last_check: Some(chrono::Utc::now()),
+            status_code: None,
+            response_time_ms: None,
+            consecutive_failures: 0,
+            error_message: Some("DNS resolution failed".to_string()),
+            enabled: true,
+        };
+
+        WebServer::update_status(web_server.state.clone(), service_status_unknown).await;
+
+        let state_guard = web_server.state.read().await;
+        let web_status_unknown = state_guard.get("test-service-unknown").unwrap();
+
+        assert_eq!(web_status_unknown.status, "Unknown");
+        assert!(web_status_unknown.error_message.is_some());
+        assert_eq!(
+            web_status_unknown.error_message.as_ref().unwrap(),
+            "DNS resolution failed"
+        );
+
+        // 测试 Online 状态应该清除错误信息
+        drop(state_guard);
+
+        let service_status_online = ServiceStatus {
+            name: "test-service".to_string(),
+            url: "https://example.com".to_string(),
+            status: HealthStatus::Up,
+            last_check: Some(chrono::Utc::now()),
+            status_code: Some(200),
+            response_time_ms: Some(150),
+            consecutive_failures: 0,
+            error_message: None,
+            enabled: true,
+        };
+
+        WebServer::update_status(web_server.state.clone(), service_status_online).await;
+
+        let state_guard = web_server.state.read().await;
+        let web_status_online = state_guard.get("test-service").unwrap();
+
+        assert_eq!(web_status_online.status, "Online");
+        assert!(web_status_online.error_message.is_none()); // Online 状态应该没有错误信息
     }
 
     #[test]

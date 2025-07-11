@@ -154,7 +154,9 @@ impl HttpHealthChecker {
                 self.process_successful_response(service, response, response_time)
                     .await
             }
-            Ok(Err(e)) => Ok(self.create_error_result(service, response_time, e.to_string())),
+            Ok(Err(e)) => {
+                Ok(self.create_error_result(service, response_time, self.format_request_error(&e)))
+            }
             Err(_) => Ok(self.create_timeout_result(service, response_time)),
         }
     }
@@ -199,8 +201,11 @@ impl HttpHealthChecker {
 
         if !is_healthy {
             result = result.with_error(format!(
-                "状态码不匹配: 期望 {:?}, 实际 {}",
-                service.expected_status_codes, status_code
+                "HTTP {} {}",
+                status_code,
+                reqwest::StatusCode::from_u16(status_code)
+                    .map(|s| s.canonical_reason().unwrap_or("Unknown"))
+                    .unwrap_or("Unknown")
             ));
         }
 
@@ -248,7 +253,41 @@ impl HttpHealthChecker {
             service.method.clone(),
         )
         .with_response_time(response_time)
-        .with_error("请求超时".to_string())
+        .with_error("Request timeout".to_string())
+    }
+
+    /// 格式化请求错误信息，使其更加清晰易读
+    fn format_request_error(&self, error: &reqwest::Error) -> String {
+        if error.is_timeout() {
+            "Request timeout".to_string()
+        } else if error.is_connect() {
+            "Connection refused".to_string()
+        } else if error.is_request() {
+            "Invalid request".to_string()
+        } else if let Some(status) = error.status() {
+            format!(
+                "HTTP {} {}",
+                status.as_u16(),
+                status.canonical_reason().unwrap_or("Unknown")
+            )
+        } else if error.is_decode() {
+            "Response decode error".to_string()
+        } else {
+            // 对于其他类型的错误，提供更友好的描述
+            let error_str = error.to_string();
+            if error_str.contains("dns") || error_str.contains("DNS") {
+                "DNS resolution failed".to_string()
+            } else if error_str.contains("certificate")
+                || error_str.contains("tls")
+                || error_str.contains("ssl")
+            {
+                "SSL/TLS certificate error".to_string()
+            } else if error_str.contains("network") {
+                "Network error".to_string()
+            } else {
+                format!("Request failed: {}", error_str)
+            }
+        }
     }
 }
 
@@ -366,10 +405,7 @@ mod tests {
         assert_eq!(health_result.status, HealthStatus::Down);
         assert_eq!(health_result.status_code, Some(404));
         assert!(health_result.error_message.is_some());
-        assert!(health_result
-            .error_message
-            .unwrap()
-            .contains("状态码不匹配"));
+        assert!(health_result.error_message.unwrap().contains("HTTP 404"));
     }
 
     #[tokio::test]
@@ -462,5 +498,35 @@ mod tests {
 
         assert!(results[2].is_ok());
         assert_eq!(results[2].as_ref().unwrap().status, HealthStatus::Down);
+    }
+
+    #[tokio::test]
+    async fn test_error_message_formatting() {
+        let checker =
+            HttpHealthChecker::new(Duration::from_secs(1), 0, Duration::from_millis(100)).unwrap();
+
+        // 测试连接拒绝错误
+        let service_connection_refused = create_test_service("http://localhost:99999", vec![200]);
+
+        let result = checker.check(&service_connection_refused).await.unwrap();
+        assert_eq!(result.status, HealthStatus::Down);
+        assert!(result.error_message.is_some());
+        let error_msg = result.error_message.unwrap();
+        assert!(error_msg.contains("Connection refused") || error_msg.contains("Request failed"));
+
+        // 测试HTTP错误状态码
+        let service_http_error = create_test_service("https://httpbin.org/status/500", vec![200]);
+
+        let result = checker.check(&service_http_error).await.unwrap();
+        assert_eq!(result.status, HealthStatus::Down);
+        assert!(result.error_message.is_some());
+        let error_msg = result.error_message.unwrap();
+        // 检查错误信息是否包含HTTP 500或者是网络相关错误
+        assert!(
+            error_msg.contains("HTTP 500")
+                || error_msg.contains("Request failed")
+                || error_msg.contains("Connection")
+                || error_msg.contains("timeout")
+        );
     }
 }
