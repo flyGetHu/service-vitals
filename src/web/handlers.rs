@@ -64,7 +64,9 @@ pub async fn dashboard(State(state): State<SharedWebState>) -> impl IntoResponse
 
     let template = DashboardTemplate {
         services,
-        last_updated: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+        last_updated: chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string(),
         online_count,
         offline_count,
         unknown_count,
@@ -74,10 +76,7 @@ pub async fn dashboard(State(state): State<SharedWebState>) -> impl IntoResponse
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("模板渲染失败: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "模板渲染失败",
-            ).into_response()
+            (StatusCode::INTERNAL_SERVER_ERROR, "模板渲染失败").into_response()
         }
     }
 }

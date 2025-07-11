@@ -8,7 +8,7 @@ use service_vitals::cli::args::{Args, Commands};
 use service_vitals::cli::commands::{
     CheckCommand, Command, InitCommand, InstallCommand, RestartServiceCommand,
     ServiceStatusCommand, StartServiceCommand, StatusCommand, StopCommand, StopServiceCommand,
-    TestNotificationCommand, UninstallCommand, ValidateCommand, VersionCommand, WebCommand,
+    TestNotificationCommand, UninstallCommand, ValidateCommand, VersionCommand,
 };
 use service_vitals::config::{ConfigLoader, ConfigWatcher, TomlConfigLoader};
 use service_vitals::daemon::{DaemonConfig, DaemonRuntime};
@@ -16,7 +16,8 @@ use service_vitals::health::{HttpHealthChecker, Scheduler, TaskScheduler};
 use service_vitals::logging::{LogConfig, LoggingSystem};
 use service_vitals::notification::sender::NoOpSender;
 use service_vitals::notification::FeishuSender;
-use service_vitals::status::StatusManager;
+use service_vitals::status::{ServiceStatus, StatusManager};
+use service_vitals::web::WebServer;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
@@ -140,10 +141,6 @@ async fn execute_command(args: &Args) -> Result<()> {
         }
         Commands::ServiceStatus { .. } => {
             let command = ServiceStatusCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
-        }
-        Commands::Web { .. } => {
-            let command = WebCommand;
             command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
         }
     }
@@ -298,7 +295,75 @@ async fn start_service_main(
         };
 
     // 创建任务调度器
-    let scheduler = Arc::new(TaskScheduler::new(checker, notifier, config.global.clone()));
+    let scheduler = TaskScheduler::new(checker, notifier, config.global.clone());
+
+    //  设置回调来更新 StatusManager
+    let status_manager_for_callback = status_manager.clone();
+    scheduler
+        .set_health_result_callback(Arc::new(move |result| {
+            let status_manager = status_manager_for_callback.clone();
+            let result = result.clone();
+
+            tokio::spawn(async move {
+                status_manager.update_service_status(&result).await;
+            });
+        }))
+        .await;
+
+    // 创建 Web 服务器（如果启用）
+    let web_server_handle = if let Some(ref web_config) = config.global.web {
+        if web_config.enabled {
+            info!(
+                "启动 Web 监控面板，地址: {}:{}",
+                web_config.bind_address, web_config.port
+            );
+
+            let (web_server, status_sender) = WebServer::new(web_config.clone());
+
+            // 设置健康检测结果回调，将结果发送到 Web 服务器
+            let status_sender_for_callback = status_sender.clone();
+
+            scheduler
+                .set_health_result_callback(Arc::new(move |result| {
+                    let status_sender = status_sender_for_callback.clone();
+                    let result = result.clone();
+
+                    tokio::spawn(async move {
+                        // 发送到 Web 服务器
+                        let service_status = ServiceStatus {
+                            name: result.service_name.clone(),
+                            url: result.service_url.clone(),
+                            status: result.status,
+                            last_check: Some(result.timestamp),
+                            status_code: result.status_code,
+                            response_time_ms: Some(result.response_time.as_millis() as u64),
+                            consecutive_failures: result.consecutive_failures,
+                            error_message: result.error_message.clone(),
+                            enabled: true,
+                        };
+
+                        let _ = status_sender.send(service_status).await;
+                    });
+                }))
+                .await;
+
+            // 启动 Web 服务器
+            Some(tokio::spawn(async move {
+                if let Err(e) = web_server.start().await {
+                    error!("Web 服务器启动失败: {}", e);
+                }
+            }))
+        } else {
+            info!("Web 监控面板已禁用");
+            None
+        }
+    } else {
+        info!("Web 监控面板未配置");
+        None
+    };
+
+    // 将 scheduler 包装在 Arc 中
+    let scheduler = Arc::new(scheduler);
 
     // 设置配置热重载
     let (mut config_watcher, config_receiver) = ConfigWatcher::new(
@@ -373,6 +438,12 @@ async fn start_service_main(
 
     // 停止调度器
     scheduler.stop().await.context("停止任务调度器失败")?;
+
+    // 停止 Web 服务器（如果启动了）
+    if let Some(handle) = web_server_handle {
+        handle.abort();
+        info!("Web 服务器已停止");
+    }
 
     info!("服务已停止");
 

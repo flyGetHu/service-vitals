@@ -1,290 +1,475 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Service Vitals - 监控面板</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background-color: #f5f5f5;
-            color: #333;
-            line-height: 1.6;
-        }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        background-color: #f5f5f5;
+        color: #333;
+        line-height: 1.6;
+      }
 
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px 0;
+        margin-bottom: 30px;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+      }
+
+      .stat-card {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+
+      .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      .stat-label {
+        color: #666;
+        font-size: 0.9rem;
+      }
+
+      .online {
+        color: #10b981;
+      }
+      .offline {
+        color: #ef4444;
+      }
+      .unknown {
+        color: #f59e0b;
+      }
+
+      .services-table {
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 15px;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      th {
+        background-color: #f9fafb;
+        font-weight: 600;
+        color: #374151;
+      }
+
+      tr:hover {
+        background-color: #f9fafb;
+      }
+
+      .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        text-transform: uppercase;
+      }
+
+      .status-online {
+        background-color: #d1fae5;
+        color: #065f46;
+      }
+
+      .status-offline {
+        background-color: #fee2e2;
+        color: #991b1b;
+      }
+
+      .status-unknown {
+        background-color: #fef3c7;
+        color: #92400e;
+      }
+
+      .url-link {
+        color: #3b82f6;
+        text-decoration: none;
+      }
+
+      .url-link:hover {
+        text-decoration: underline;
+      }
+
+      .history {
+        margin-top: 10px;
+        padding: 10px;
+        background-color: #f8fafc;
+        border-radius: 5px;
+        font-size: 0.8rem;
+      }
+
+      .history-item {
+        margin-bottom: 5px;
+        color: #6b7280;
+      }
+
+      .auto-refresh {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #3b82f6;
+        color: white;
+        padding: 10px 15px;
+        border-radius: 5px;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .loading-indicator {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #ffffff40;
+        border-top: 2px solid #ffffff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error-message {
+        background-color: #fee2e2;
+        color: #991b1b;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        display: none;
+      }
+
+      .fade-in {
+        animation: fadeIn 0.3s ease-in;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @media (max-width: 768px) {
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px 0;
-            margin-bottom: 30px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          padding: 10px;
         }
 
         .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            text-align: center;
-        }
-
-        .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        .stat-label {
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        .online { color: #10b981; }
-        .offline { color: #ef4444; }
-        .unknown { color: #f59e0b; }
-
-        .services-table {
-            background: white;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          font-size: 2rem;
         }
 
         table {
-            width: 100%;
-            border-collapse: collapse;
+          font-size: 0.9rem;
         }
 
-        th, td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #e5e7eb;
+        th,
+        td {
+          padding: 10px 8px;
         }
 
-        th {
-            background-color: #f9fafb;
-            font-weight: 600;
-            color: #374151;
+        .stats {
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         }
-
-        tr:hover {
-            background-color: #f9fafb;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            text-transform: uppercase;
-        }
-
-        .status-online {
-            background-color: #d1fae5;
-            color: #065f46;
-        }
-
-        .status-offline {
-            background-color: #fee2e2;
-            color: #991b1b;
-        }
-
-        .status-unknown {
-            background-color: #fef3c7;
-            color: #92400e;
-        }
-
-        .url-link {
-            color: #3b82f6;
-            text-decoration: none;
-        }
-
-        .url-link:hover {
-            text-decoration: underline;
-        }
-
-        .history {
-            margin-top: 10px;
-            padding: 10px;
-            background-color: #f8fafc;
-            border-radius: 5px;
-            font-size: 0.8rem;
-        }
-
-        .history-item {
-            margin-bottom: 5px;
-            color: #6b7280;
-        }
-
-        .auto-refresh {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #3b82f6;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            font-size: 0.9rem;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-
-            .header h1 {
-                font-size: 2rem;
-            }
-
-            table {
-                font-size: 0.9rem;
-            }
-
-            th, td {
-                padding: 10px 8px;
-            }
-
-            .stats {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            }
-        }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="auto-refresh">
-        🔄 自动刷新: 每秒更新
+      🔄 自动刷新: 每3秒更新
+      <div class="loading-indicator"></div>
     </div>
 
     <div class="container">
-        <div class="header">
-            <h1>Service Vitals</h1>
-            <p>实时服务监控面板 - 最后更新: {{ last_updated }}</p>
-        </div>
+      <div class="error-message" id="error-message"></div>
 
-        <div class="stats">
-            <div class="stat-card">
-                <div class="stat-number">{{ services.len() }}</div>
-                <div class="stat-label">总服务数</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number online">{{ online_count }}</div>
-                <div class="stat-label">在线服务</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number offline">{{ offline_count }}</div>
-                <div class="stat-label">离线服务</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number unknown">{{ unknown_count }}</div>
-                <div class="stat-label">未知状态</div>
-            </div>
-        </div>
+      <div class="header">
+        <h1>Service Vitals</h1>
+        <p id="last-updated">实时服务监控面板 - 最后更新: {{ last_updated }}</p>
+      </div>
 
-        <div class="services-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>服务名称</th>
-                        <th>服务URL</th>
-                        <th>状态</th>
-                        <th>响应延迟</th>
-                        <th>最后检查</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for service in services %}
-                    <tr>
-                        <td>
-                            <strong>{{ service.name }}</strong>
-                            {% if !service.history.is_empty() %}
-                            <div class="history">
-                                <strong>状态历史:</strong>
-                                {% for history in service.history %}
-                                <div class="history-item">
-                                    {{ history.timestamp.format("%H:%M:%S") }} -
-                                    {{ history.status }}
-                                    {% match history.response_time_ms %}
-                                    {% when Some with (rt) %}
-                                    ({{ rt }}ms)
-                                    {% when None %}
-                                    {% endmatch %}
-                                </div>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if !service.url.is_empty() %}
-                            <a href="{{ service.url }}" target="_blank" class="url-link">{{ service.url }}</a>
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                        <td>
-                            <span class="status-badge status-{{ service.status|lower }}">
-                                {{ service.status }}
-                            </span>
-                        </td>
-                        <td>
-                            {% match service.response_time_ms %}
-                            {% when Some with (rt) %}
-                            {{ rt }}ms
-                            {% when None %}
-                            -
-                            {% endmatch %}
-                        </td>
-                        <td>
-                            {% match service.last_check %}
-                            {% when Some with (last_check) %}
-                            {{ last_check.format("%Y-%m-%d %H:%M:%S") }}
-                            {% when None %}
-                            -
-                            {% endmatch %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-number" id="total-services">
+            {{ services.len() }}
+          </div>
+          <div class="stat-label">总服务数</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-number online" id="online-services">
+            {{ online_count }}
+          </div>
+          <div class="stat-label">在线服务</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number offline" id="offline-services">
+            {{ offline_count }}
+          </div>
+          <div class="stat-label">离线服务</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number unknown" id="unknown-services">
+            {{ unknown_count }}
+          </div>
+          <div class="stat-label">未知状态</div>
+        </div>
+      </div>
+
+      <div class="services-table">
+        <table>
+          <thead>
+            <tr>
+              <th>服务名称</th>
+              <th>服务URL</th>
+              <th>状态</th>
+              <th>响应延迟</th>
+              <th>最后检查</th>
+            </tr>
+          </thead>
+          <tbody id="services-tbody">
+            {% for service in services %}
+            <tr>
+              <td>
+                <strong>{{ service.name }}</strong>
+                {% if !service.history.is_empty() %}
+                <div class="history">
+                  <strong>状态历史:</strong>
+                  {% for history in service.history %}
+                  <div class="history-item">
+                    {{ history.timestamp.format("%H:%M:%S") }} - {{
+                    history.status }} {% match history.response_time_ms %} {%
+                    when Some with (rt) %} ({{ rt }}ms) {% when None %} {%
+                    endmatch %}
+                  </div>
+                  {% endfor %}
+                </div>
+                {% endif %}
+              </td>
+              <td>
+                {% if !service.url.is_empty() %}
+                <a href="{{ service.url }}" target="_blank" class="url-link"
+                  >{{ service.url }}</a
+                >
+                {% else %} - {% endif %}
+              </td>
+              <td>
+                <span class="status-badge status-{{ service.status|lower }}">
+                  {{ service.status }}
+                </span>
+              </td>
+              <td>
+                {% match service.response_time_ms %} {% when Some with (rt) %}
+                {{ rt }}ms {% when None %} - {% endmatch %}
+              </td>
+              <td>
+                {% match service.last_check %} {% when Some with (last_check) %}
+                {{ last_check.format("%Y-%m-%d %H:%M:%S") }} {% when None %} -
+                {% endmatch %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <script>
-        // 每秒自动刷新页面
-        setTimeout(function() {
-            window.location.reload();
-        }, 1000);
-    </script>
-</body>
+        let isLoading = false;
+        let errorCount = 0;
+        const maxErrors = 5;
+
+        // 显示/隐藏加载指示器
+        function showLoading(show) {
+            const indicator = document.querySelector('.loading-indicator');
+            indicator.style.display = show ? 'block' : 'none';
+            isLoading = show;
+        }
+
+        // 显示错误消息
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // 格式化时间
+        function formatDateTime(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        // 更新统计数据
+        function updateStats(data) {
+            document.getElementById('total-services').textContent = data.total_services;
+            document.getElementById('online-services').textContent = data.online_services;
+            document.getElementById('offline-services').textContent = data.offline_services;
+            document.getElementById('unknown-services').textContent = data.total_services - data.online_services - data.offline_services;
+            document.getElementById('last-updated').textContent = `实时服务监控面板 - 最后更新: ${formatDateTime(data.last_updated)}`;
+        }
+
+        // 更新服务表格
+        function updateServicesTable(services) {
+            const tbody = document.getElementById('services-tbody');
+            tbody.innerHTML = '';
+
+            services.forEach(service => {
+                const row = document.createElement('tr');
+                row.className = 'fade-in';
+
+                // 构建历史记录HTML
+                let historyHtml = '';
+                if (service.history && service.history.length > 0) {
+                    historyHtml = `
+                        <div class="history">
+                            <strong>状态历史:</strong>
+                            ${service.history.map(h => `
+                                <div class="history-item">
+                                    ${formatDateTime(h.timestamp)} - ${h.status}
+                                    ${h.response_time_ms ? `(${h.response_time_ms}ms)` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+
+                row.innerHTML = `
+                    <td>
+                        <strong>${service.name}</strong>
+                        ${historyHtml}
+                    </td>
+                    <td>
+                        ${service.url ? `<a href="${service.url}" target="_blank" class="url-link">${service.url}</a>` : '-'}
+                    </td>
+                    <td>
+                        <span class="status-badge status-${service.status.toLowerCase()}">
+                            ${service.status}
+                        </span>
+                    </td>
+                    <td>
+                        ${service.response_time_ms ? `${service.response_time_ms}ms` : '-'}
+                    </td>
+                    <td>
+                        ${service.last_check ? formatDateTime(service.last_check) : '-'}
+                    </td>
+                `;
+
+                tbody.appendChild(row);
+            });
+        }
+
+        // 获取最新数据
+        async function fetchData() {
+            if (isLoading) return;
+
+            try {
+                showLoading(true);
+                const response = await fetch('/api/v1/status');
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // 更新页面内容
+                updateStats(data);
+                updateServicesTable(data.services);
+
+                // 重置错误计数
+                errorCount = 0;
+
+            } catch (error) {
+                console.error('获取数据失败:', error);
+                errorCount++;
+
+                if (errorCount <= maxErrors) {
+                    showError(`获取数据失败: ${error.message} (${errorCount}/${maxErrors})`);
+                } else {
+                    showError('连续获取数据失败，请检查网络连接或刷新页面');
+                }
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // 页面加载完成后开始定时更新
+        document.addEventListener('DOMContentLoaded', function() {
+            // 立即获取一次数据
+            fetchData();
+
+            // 每3秒更新一次
+            setInterval(fetchData, 3000);
+        });
+  </body>
 </html>

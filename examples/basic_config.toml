@@ -14,6 +14,11 @@ request_timeout_seconds = 10
 # 最大并发检测数（默认50）
 max_concurrent_checks = 50
 
+[global.web]
+enabled = true
+port = 8080
+bind_address = "0.0.0.0"
+
 [[services]]
 name = "示例API服务"
 url = "https://api.example.com/health"

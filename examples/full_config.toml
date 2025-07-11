@@ -39,6 +39,11 @@ retry_attempts = 3
 # 重试间隔（秒）
 retry_delay_seconds = 5
 
+[global.web]
+enabled = true
+port = 8080
+bind_address = "0.0.0.0"
+
 # 可选的全局请求头（键值对）
 [global.headers]
 "User-Agent" = "ServiceVitals/1.0"

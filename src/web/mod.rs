@@ -7,10 +7,7 @@ pub mod handlers;
 use crate::config::types::WebConfig;
 use crate::error::{Result, ServiceVitalsError};
 use crate::status::ServiceStatus;
-use axum::{
-    routing::get,
-    Router,
-};
+use axum::{routing::get, Router};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -77,7 +74,7 @@ impl WebServer {
     pub fn new(config: WebConfig) -> (Self, mpsc::Sender<ServiceStatus>) {
         let (tx, rx) = mpsc::channel(1000);
         let state = Arc::new(RwLock::new(HashMap::new()));
-        
+
         (
             Self {
                 config,
@@ -158,17 +155,18 @@ impl WebServer {
     /// 更新服务状态
     async fn update_status(state: SharedWebState, status: ServiceStatus) {
         let mut state_guard = state.write().await;
-        
-        let web_status = state_guard
-            .entry(status.name.clone())
-            .or_insert_with(|| WebServiceStatus {
-                name: status.name.clone(),
-                url: status.url.clone(),
-                status: "Unknown".to_string(),
-                response_time_ms: None,
-                last_check: None,
-                history: Vec::new(),
-            });
+
+        let web_status =
+            state_guard
+                .entry(status.name.clone())
+                .or_insert_with(|| WebServiceStatus {
+                    name: status.name.clone(),
+                    url: status.url.clone(),
+                    status: "Unknown".to_string(),
+                    response_time_ms: None,
+                    last_check: None,
+                    history: Vec::new(),
+                });
 
         // 更新当前状态
         let new_status = if status.status.is_healthy() {

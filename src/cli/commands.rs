@@ -2,9 +2,12 @@
 //!
 //! 实现各种CLI命令的处理逻辑
 
-use crate::cli::args::{Args, Commands, ConfigTemplate, NotificationType, OutputFormat, WebCommands};
+use crate::cli::args::{Args, Commands, ConfigTemplate, NotificationType, OutputFormat};
 use crate::config::{ConfigLoader, TomlConfigLoader};
-use crate::daemon::{service_manager::{ServiceManager, ServiceInfo}, DaemonConfig};
+use crate::daemon::{
+    service_manager::{ServiceInfo, ServiceManager},
+    DaemonConfig,
+};
 use crate::error::Result;
 use crate::health::{HealthChecker, HttpHealthChecker};
 use crate::notification::sender::{MessageType, NotificationMessage};
@@ -750,7 +753,7 @@ impl Command for ServiceStatusCommand {
 
             // 获取系统服务状态
             let service_info = service_manager.get_service_status(service_name).await?;
-            
+
             // 尝试从状态文件加载应用状态
             let status_file = StatusManager::get_default_status_file_path();
             let app_status = StatusManager::load_from_file(&status_file).await.ok();
@@ -758,13 +761,16 @@ impl Command for ServiceStatusCommand {
             // 根据格式输出
             match format {
                 OutputFormat::Json => {
-                    self.display_json_status(&service_info, &app_status, *verbose).await?;
+                    self.display_json_status(&service_info, &app_status, *verbose)
+                        .await?;
                 }
                 OutputFormat::Yaml => {
-                    self.display_yaml_status(&service_info, &app_status, *verbose).await?;
+                    self.display_yaml_status(&service_info, &app_status, *verbose)
+                        .await?;
                 }
                 OutputFormat::Text | OutputFormat::Table => {
-                    self.display_text_status(&service_info, &app_status, *verbose).await?;
+                    self.display_text_status(&service_info, &app_status, *verbose)
+                        .await?;
                 }
             }
         }
@@ -780,18 +786,29 @@ impl ServiceStatusCommand {
         app_status: &Option<OverallStatus>,
         verbose: bool,
     ) -> Result<()> {
-        let combined_status = serde_json::json!({
-            "system_service": {
-                "name": service_info.name,
-                "status": service_info.status,
-                "is_installed": service_info.is_installed,
-                "platform": service_info.platform
-            },
-            "application_status": app_status,
-            "metrics_update_check": self.check_metrics_updates(service_info, app_status).await
-        });
-        
-        println!("{}", serde_json::to_string_pretty(&combined_status)?);
+        if verbose {
+            let combined_status = serde_json::json!({
+                "system_service": {
+                    "name": service_info.name,
+                    "status": service_info.status,
+                    "is_installed": service_info.is_installed,
+                    "platform": service_info.platform
+                },
+                "application_status": app_status,
+                "metrics_update_check": self.check_metrics_updates(service_info, app_status).await
+            });
+            println!("{}", serde_json::to_string_pretty(&combined_status)?);
+        } else {
+            let combined_status = serde_json::json!({
+                "system_service": {
+                    "name": service_info.name,
+                    "status": service_info.status,
+                    "is_installed": service_info.is_installed,
+                    "platform": service_info.platform
+                }
+            });
+            println!("{}", serde_json::to_string_pretty(&combined_status)?);
+        }
         Ok(())
     }
 
@@ -807,7 +824,7 @@ impl ServiceStatusCommand {
         println!("  status: {:?}", service_info.status);
         println!("  is_installed: {}", service_info.is_installed);
         println!("  platform: {}", service_info.platform);
-        
+
         if let Some(status) = app_status {
             println!("application_status:");
             println!("  start_time: {}", status.start_time);
@@ -819,7 +836,7 @@ impl ServiceStatusCommand {
             if let Some(reload_time) = status.last_config_reload {
                 println!("  last_config_reload: {reload_time}");
             }
-            
+
             // 在 verbose 模式下显示服务详情
             if verbose && !status.services.is_empty() {
                 println!("  services:");
@@ -849,9 +866,12 @@ impl ServiceStatusCommand {
         let metrics_check = self.check_metrics_updates(service_info, app_status).await;
         println!("metrics_update_check:");
         println!("  is_updating: {}", metrics_check.is_updating);
-        println!("  last_update_age_seconds: {}", metrics_check.last_update_age_seconds.unwrap_or(0));
+        println!(
+            "  last_update_age_seconds: {}",
+            metrics_check.last_update_age_seconds.unwrap_or(0)
+        );
         println!("  status_summary: {}", metrics_check.status_summary);
-        
+
         Ok(())
     }
 
@@ -900,7 +920,10 @@ impl ServiceStatusCommand {
                 status.start_time.format("%Y-%m-%d %H:%M:%S UTC")
             );
             println!("  配置文件: {}", status.config_path.display());
-            println!("  运行时长: {}", self.format_duration(chrono::Utc::now() - status.start_time));
+            println!(
+                "  运行时长: {}",
+                self.format_duration(chrono::Utc::now() - status.start_time)
+            );
             println!();
 
             // 服务统计
@@ -968,10 +991,7 @@ impl ServiceStatusCommand {
                         );
 
                         if let Some(ref error) = service.error_message {
-                            println!(
-                                "│   错误: {:<71} │",
-                                truncate_string(error, 71)
-                            );
+                            println!("│   错误: {:<71} │", truncate_string(error, 71));
                         }
                     }
 
@@ -979,12 +999,16 @@ impl ServiceStatusCommand {
                 } else {
                     // 简化模式：显示最近的检测活动
                     println!("  📋 最近检测活动:");
-                    let mut recent_checks: Vec<_> = status.services.iter()
+                    let mut recent_checks: Vec<_> = status
+                        .services
+                        .iter()
                         .filter(|s| s.last_check.is_some())
                         .collect();
-                    recent_checks.sort_by(|a, b| 
-                        b.last_check.unwrap_or_default().cmp(&a.last_check.unwrap_or_default())
-                    );
+                    recent_checks.sort_by(|a, b| {
+                        b.last_check
+                            .unwrap_or_default()
+                            .cmp(&a.last_check.unwrap_or_default())
+                    });
 
                     for (i, service) in recent_checks.iter().take(5).enumerate() {
                         let status_icon = match service.status {
@@ -1008,7 +1032,10 @@ impl ServiceStatusCommand {
                         );
                     }
                     if recent_checks.len() > 5 {
-                        println!("    ... 还有 {} 个服务，使用 --verbose 查看完整列表", recent_checks.len() - 5);
+                        println!(
+                            "    ... 还有 {} 个服务，使用 --verbose 查看完整列表",
+                            recent_checks.len() - 5
+                        );
                     }
                 }
                 println!();
@@ -1022,20 +1049,30 @@ impl ServiceStatusCommand {
         // 指标更新检查
         let metrics_check = self.check_metrics_updates(service_info, app_status).await;
         println!("🔄 指标更新检查:");
-        println!("  更新状态: {}", if metrics_check.is_updating { "✅ 正常更新" } else { "❌ 更新异常" });
-        
+        println!(
+            "  更新状态: {}",
+            if metrics_check.is_updating {
+                "✅ 正常更新"
+            } else {
+                "❌ 更新异常"
+            }
+        );
+
         if let Some(age_seconds) = metrics_check.last_update_age_seconds {
             if age_seconds > 0 {
-                println!("  最后更新: {}前", self.format_duration_seconds(age_seconds));
+                println!(
+                    "  最后更新: {}前",
+                    self.format_duration_seconds(age_seconds)
+                );
             } else {
                 println!("  最后更新: 刚刚");
             }
         } else {
             println!("  最后更新: 无记录");
         }
-        
+
         println!("  状态总结: {}", metrics_check.status_summary);
-        
+
         // 建议操作
         if !metrics_check.is_updating {
             println!();
@@ -1063,25 +1100,27 @@ impl ServiceStatusCommand {
     ) -> MetricsUpdateCheck {
         let mut is_updating = false;
         let mut last_update_age_seconds = None;
-        let mut status_summary = String::new();
+        let status_summary;
 
         match (&service_info.status, app_status) {
             (crate::daemon::DaemonStatus::Running, Some(status)) => {
                 // 系统服务运行中且有应用状态
-                if let Some(most_recent_check) = status.services.iter()
-                    .filter_map(|s| s.last_check)
-                    .max() {
-                    
+                if let Some(most_recent_check) =
+                    status.services.iter().filter_map(|s| s.last_check).max()
+                {
                     let age = (chrono::Utc::now() - most_recent_check).num_seconds() as u64;
                     last_update_age_seconds = Some(age);
-                    
+
                     // 如果最近5分钟内有更新，认为是正常的
                     is_updating = age < 300;
-                    
+
                     status_summary = if is_updating {
                         "服务正常运行，指标持续更新".to_string()
                     } else {
-                        format!("服务运行但指标更新滞后（{}前）", self.format_duration_seconds(age))
+                        format!(
+                            "服务运行但指标更新滞后（{}前）",
+                            self.format_duration_seconds(age)
+                        )
                     };
                 } else {
                     status_summary = "服务运行中，但尚无检测记录".to_string();
@@ -1105,7 +1144,7 @@ impl ServiceStatusCommand {
     /// 格式化持续时间
     fn format_duration(&self, duration: chrono::Duration) -> String {
         let total_seconds = duration.num_seconds();
-        
+
         if total_seconds < 60 {
             format!("{}秒", total_seconds)
         } else if total_seconds < 3600 {
@@ -1124,7 +1163,7 @@ impl ServiceStatusCommand {
     /// 格式化相对时间
     fn format_relative_time(&self, duration: chrono::Duration) -> String {
         let total_seconds = duration.num_seconds();
-        
+
         if total_seconds < 60 {
             format!("{}秒", total_seconds)
         } else if total_seconds < 3600 {
@@ -1263,131 +1302,6 @@ impl TestNotificationCommand {
                 println!("  2. 网络连接是否正常");
                 println!("  3. 飞书机器人是否已添加到群组");
             }
-        }
-
-        Ok(())
-    }
-}
-
-/// Web 命令处理器
-pub struct WebCommand;
-
-#[async_trait]
-impl Command for WebCommand {
-    async fn execute(&self, args: &Args) -> Result<()> {
-        if let Commands::Web { command } = &args.command {
-            match command {
-                WebCommands::Serve {
-                    port,
-                    bind_address,
-                    foreground,
-                } => {
-                    self.handle_serve(args, *port, bind_address.clone(), *foreground)
-                        .await
-                }
-            }
-        } else {
-            Ok(())
-        }
-    }
-}
-
-impl WebCommand {
-    /// 处理 web serve 命令
-    async fn handle_serve(
-        &self,
-        args: &Args,
-        port_override: Option<u16>,
-        bind_address_override: Option<String>,
-        foreground: bool,
-    ) -> Result<()> {
-        use crate::health::{TaskScheduler, Scheduler};
-        use crate::web::WebServer;
-        use std::sync::Arc;
-        use tokio::sync::broadcast;
-        use std::time::Duration;
-
-        println!("🚀 启动 Service Vitals Web 监控面板...");
-
-        // 加载配置
-        let loader = TomlConfigLoader::new(true);
-        let mut config = loader.load_from_file(args.get_config_path()).await?;
-
-        // 应用命令行参数覆盖
-        let mut web_config = config.global.web.unwrap_or_default();
-        if let Some(port) = port_override {
-            web_config.port = port;
-        }
-        if let Some(bind_address) = bind_address_override {
-            web_config.bind_address = bind_address;
-        }
-        web_config.enabled = true; // 强制启用
-
-        config.global.web = Some(web_config.clone());
-
-        // 保存配置信息用于后续显示
-        let bind_address = web_config.bind_address.clone();
-        let port = web_config.port;
-
-        // 创建 Web 服务器
-        let (web_server, _status_sender) = WebServer::new(web_config);
-
-        // 创建健康检查调度器
-        let checker = Arc::new(HttpHealthChecker::new(
-            Duration::from_secs(30),
-            3,
-            Duration::from_secs(1),
-        )?);
-        let (shutdown_tx, _shutdown_rx) = broadcast::channel(1);
-
-        let scheduler = TaskScheduler::new(
-            checker,
-            None, // 暂时不使用通知
-            config.global.clone(),
-        );
-
-        // 启动健康检查任务
-        let services: Vec<_> = config.services.clone();
-        let scheduler_handle = tokio::spawn(async move {
-            if let Err(e) = scheduler.start(services).await {
-                tracing::error!("健康检查调度器启动失败: {}", e);
-            }
-        });
-
-        // 启动 Web 服务器
-        let web_handle = tokio::spawn(async move {
-            if let Err(e) = web_server.start().await {
-                tracing::error!("Web 服务器启动失败: {}", e);
-            }
-        });
-
-        println!("✅ Web 监控面板已启动");
-        println!("📊 访问地址: http://{bind_address}:{port}/dashboard");
-        println!("🔗 API 端点: http://{bind_address}:{port}/api/v1/status");
-
-        if foreground {
-            println!("⏹️  按 Ctrl+C 停止服务");
-
-            // 等待中断信号
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\n🛑 收到停止信号，正在关闭服务...");
-                }
-                _ = scheduler_handle => {
-                    println!("健康检查调度器已停止");
-                }
-                _ = web_handle => {
-                    println!("Web 服务器已停止");
-                }
-            }
-
-            // 发送关闭信号
-            let _ = shutdown_tx.send(());
-            println!("✅ 服务已停止");
-        } else {
-            // 后台运行模式
-            println!("🔄 服务正在后台运行...");
-            let _ = tokio::try_join!(scheduler_handle, web_handle);
         }
 
         Ok(())

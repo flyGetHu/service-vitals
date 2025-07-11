@@ -4,7 +4,7 @@
 
 use crate::config::types::{GlobalConfig, ServiceConfig};
 use crate::config::{ConfigDiff, ConfigUpdateNotification};
-use crate::health::{HealthChecker, HealthStatus};
+use crate::health::{HealthChecker, HealthResult, HealthStatus};
 use crate::notification::NotificationSender;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -15,6 +15,9 @@ use tokio::sync::{broadcast, RwLock, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, Instant};
 use tracing::{debug, error, info, warn};
+
+/// 健康检测结果回调函数类型
+pub type HealthResultCallback = Arc<dyn Fn(&HealthResult) + Send + Sync>;
 
 /// 服务通知状态
 #[derive(Debug, Clone, Default)]
@@ -113,6 +116,8 @@ pub struct TaskScheduler {
     notification_states: Arc<RwLock<HashMap<String, ServiceNotificationState>>>,
     /// 配置更新接收器
     config_update_receiver: Option<broadcast::Receiver<ConfigUpdateNotification>>,
+    /// 健康检测结果回调
+    health_result_callback: Arc<RwLock<Option<HealthResultCallback>>>,
 }
 
 impl TaskScheduler {
@@ -148,7 +153,17 @@ impl TaskScheduler {
             status: Arc::new(RwLock::new(status)),
             notification_states: Arc::new(RwLock::new(HashMap::new())),
             config_update_receiver: None,
+            health_result_callback: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// 设置健康检测结果回调
+    ///
+    /// # 参数
+    /// * `callback` - 健康检测结果回调函数
+    pub async fn set_health_result_callback(&self, callback: HealthResultCallback) {
+        let mut cb = self.health_result_callback.write().await;
+        *cb = Some(callback);
     }
 
     /// 静态方法处理通知逻辑
@@ -260,6 +275,7 @@ impl TaskScheduler {
         // 创建检测任务
         let notifier = self.notifier.clone();
         let status_arc = Arc::clone(&self.status);
+        let health_callback = self.health_result_callback.clone();
         let task = tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(check_interval));
 
@@ -303,6 +319,14 @@ impl TaskScheduler {
                         {
                             error!("处理通知失败: {}", e);
                         }
+                    }
+                }
+
+                // 调用健康检测结果回调
+                {
+                    let callback_guard = health_callback.read().await;
+                    if let Some(ref callback) = *callback_guard {
+                        callback(&result);
                     }
                 }
 
