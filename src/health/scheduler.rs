@@ -5,7 +5,7 @@
 use crate::config::types::{GlobalConfig, ServiceConfig};
 use crate::config::{ConfigDiff, ConfigUpdateNotification};
 use crate::health::{HealthChecker, HealthResult, HealthStatus};
-use crate::notification::NotificationSender;
+use crate::notification::{NotificationSender, sender::{NotificationMessage, MessageType}};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -74,6 +74,30 @@ pub struct NotificationStats {
     pub recent_notifications: Vec<Instant>,
 }
 
+/// 批量通知项
+#[derive(Debug, Clone)]
+pub struct BatchNotificationItem {
+    /// 服务配置
+    pub service: ServiceConfig,
+    /// 健康检测结果
+    pub result: HealthResult,
+    /// 通知类型
+    pub notification_type: BatchNotificationType,
+    /// 通知时间
+    pub notification_time: Instant,
+}
+
+/// 批量通知类型
+#[derive(Debug, Clone)]
+pub enum BatchNotificationType {
+    /// 告警通知
+    Alert,
+    /// 恢复通知
+    Recovery,
+}
+
+
+
 /// 任务调度器trait，定义调度接口
 #[async_trait]
 pub trait Scheduler: Send + Sync {
@@ -128,6 +152,10 @@ pub struct TaskScheduler {
     config_update_receiver: Option<broadcast::Receiver<ConfigUpdateNotification>>,
     /// 健康检测结果回调
     health_result_callback: Arc<RwLock<Option<HealthResultCallback>>>,
+    /// 批量通知队列
+    batch_notifications: Arc<RwLock<Vec<BatchNotificationItem>>>,
+    /// 批量通知任务句柄
+    batch_task_handle: Option<JoinHandle<()>>,
 }
 
 impl TaskScheduler {
@@ -164,6 +192,8 @@ impl TaskScheduler {
             notification_states: Arc::new(RwLock::new(HashMap::new())),
             config_update_receiver: None,
             health_result_callback: Arc::new(RwLock::new(None)),
+            batch_notifications: Arc::new(RwLock::new(Vec::new())),
+            batch_task_handle: None,
         }
     }
 
@@ -202,27 +232,11 @@ impl TaskScheduler {
                 .is_none_or(|until| now >= until);
             
             if can_send_recovery {
-                // 检查全局通知频率限制
-                if !Self::check_global_notification_rate_limit(status_arc).await {
-                    debug!("全局通知频率限制触发，跳过恢复通知发送: {}", service.name);
-                } else {
-                    if let Some(ref notifier) = notifier {
-                        let send_result = notifier.send_health_alert(service, result).await;
-                        match send_result {
-                            Ok(()) => {
-                                info!("发送服务恢复通知成功: {}", service.name);
-                                notification_state.last_recovery_notification_time = Some(now);
-                                notification_state.recovery_cooldown_until = 
-                                    Some(now + Duration::from_secs(recovery_cooldown_secs));
-                                Self::update_notification_stats_static(status_arc, true).await;
-                            }
-                            Err(e) => {
-                                error!("发送服务恢复通知失败: {} - {}", service.name, e);
-                                Self::update_notification_stats_static(status_arc, false).await;
-                            }
-                        }
-                    }
-                }
+                // 暂时跳过恢复通知，等待批量通知机制
+                debug!("服务 {} 需要恢复通知，等待批量发送", service.name);
+                notification_state.last_recovery_notification_time = Some(now);
+                notification_state.recovery_cooldown_until = 
+                    Some(now + Duration::from_secs(recovery_cooldown_secs));
             } else {
                 debug!("服务 {} 恢复通知仍在冷却中，跳过发送", service.name);
             }
@@ -242,27 +256,12 @@ impl TaskScheduler {
                     .alert_cooldown_until
                     .is_none_or(|until| now >= until);
                 if can_alert {
-                    // 检查全局通知频率限制
-                    if !Self::check_global_notification_rate_limit(status_arc).await {
-                        debug!("全局通知频率限制触发，跳过告警通知发送: {}", service.name);
-                    } else {
-                        if let Some(ref notifier) = notifier {
-                            let send_result = notifier.send_health_alert(service, result).await;
-                            match send_result {
-                                Ok(()) => {
-                                    info!("发送服务告警通知成功: {}", service.name);
-                                    notification_state.notification_count += 1;
-                                    notification_state.last_notification_time = Some(now);
-                                    notification_state.has_sent_alert = true; // 标记已发送告警
-                                    Self::update_notification_stats_static(status_arc, true).await;
-                                }
-                                Err(e) => {
-                                    error!("发送服务告警通知失败: {} - {}", service.name, e);
-                                    Self::update_notification_stats_static(status_arc, false).await;
-                                }
-                            }
-                        }
-                    }
+                    // 暂时跳过告警通知，等待批量通知机制
+                    debug!("服务 {} 需要告警通知，等待批量发送", service.name);
+                    notification_state.notification_count += 1;
+                    notification_state.last_notification_time = Some(now);
+                    notification_state.has_sent_alert = true; // 标记已发送告警
+                    
                     // 设置下次可告警的最早时间
                     notification_state.alert_cooldown_until =
                         Some(now + Duration::from_secs(cooldown_secs));
@@ -700,12 +699,191 @@ impl TaskScheduler {
             states.remove(service_name);
         }
     }
+
+    /// 启动批量通知任务
+    async fn start_batch_notification_task(&mut self) {
+        if self.batch_task_handle.is_some() {
+            return; // 已经启动
+        }
+
+        let notifier = self.notifier.clone();
+        let status_arc = Arc::clone(&self.status);
+        let batch_notifications = Arc::clone(&self.batch_notifications);
+
+        let task = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5)); // 5秒批量间隔
+            
+            loop {
+                interval.tick().await;
+                
+                // 获取待发送的通知
+                let notifications = {
+                    let mut queue = batch_notifications.write().await;
+                    queue.drain(..).collect::<Vec<_>>()
+                };
+
+                if !notifications.is_empty() {
+                    if let Some(ref notifier) = notifier {
+                        // 按类型分组通知
+                        let (alerts, recoveries): (Vec<_>, Vec<_>) = notifications
+                            .into_iter()
+                            .partition(|item| matches!(item.notification_type, BatchNotificationType::Alert));
+
+                        // 发送告警通知
+                        if !alerts.is_empty() {
+                            if let Err(e) = Self::send_batch_alert(notifier, &alerts).await {
+                                error!("发送批量告警通知失败: {}", e);
+                                Self::update_notification_stats_static(&status_arc, false).await;
+                            } else {
+                                info!("发送批量告警通知成功，包含 {} 个服务", alerts.len());
+                                Self::update_notification_stats_static(&status_arc, true).await;
+                            }
+                        }
+
+                        // 发送恢复通知
+                        if !recoveries.is_empty() {
+                            if let Err(e) = Self::send_batch_recovery(notifier, &recoveries).await {
+                                error!("发送批量恢复通知失败: {}", e);
+                                Self::update_notification_stats_static(&status_arc, false).await;
+                            } else {
+                                info!("发送批量恢复通知成功，包含 {} 个服务", recoveries.len());
+                                Self::update_notification_stats_static(&status_arc, true).await;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        self.batch_task_handle = Some(task);
+    }
+
+    /// 停止批量通知任务
+    async fn stop_batch_notification_task(&mut self) {
+        if let Some(handle) = self.batch_task_handle.take() {
+            handle.abort();
+        }
+    }
+
+    /// 添加通知到批量队列
+    async fn add_to_batch_queue(
+        &self,
+        service: ServiceConfig,
+        result: HealthResult,
+        notification_type: BatchNotificationType,
+    ) {
+        let item = BatchNotificationItem {
+            service,
+            result,
+            notification_type,
+            notification_time: Instant::now(),
+        };
+        
+        let mut queue = self.batch_notifications.write().await;
+        queue.push(item);
+    }
+
+    /// 发送批量告警通知
+    async fn send_batch_alert(
+        notifier: &Arc<dyn NotificationSender>,
+        alerts: &[BatchNotificationItem],
+    ) -> Result<()> {
+        let mut content = String::new();
+        content.push_str("🚨 **批量服务告警通知**\n\n");
+        content.push_str(&format!("**检测时间**: {}\n", 
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")));
+        content.push_str(&format!("**告警服务数量**: {}\n\n", alerts.len()));
+
+        for (i, alert) in alerts.iter().enumerate() {
+            content.push_str(&format!("**{}. {}**\n", i + 1, alert.service.name));
+            content.push_str(&format!("- **服务地址**: {}\n", alert.service.url));
+            
+            if let Some(ref description) = alert.service.description {
+                content.push_str(&format!("- **服务描述**: {}\n", description));
+            }
+            
+            content.push_str(&format!("- **HTTP状态码**: {}\n", 
+                alert.result.status_code.map(|c| c.to_string()).unwrap_or_else(|| "连接失败".to_string())));
+            content.push_str(&format!("- **响应时间**: {}ms\n", alert.result.response_time_ms()));
+            content.push_str(&format!("- **检测方法**: {}\n", alert.service.method));
+            content.push_str(&format!("- **失败阈值**: {}次\n", alert.service.failure_threshold));
+            
+            if let Some(ref error_message) = alert.result.error_message {
+                content.push_str(&format!("- **错误信息**: {}\n", error_message));
+            }
+            
+            content.push_str("\n");
+        }
+
+        content.push_str("**建议操作**\n");
+        content.push_str("1. 检查服务是否正常运行\n");
+        content.push_str("2. 查看服务器日志\n");
+        content.push_str("3. 验证网络连接\n");
+        content.push_str("4. 检查配置是否正确\n\n");
+        content.push_str("---\n");
+        content.push_str("*此通知由 Service Vitals 自动发送*");
+
+        let message = NotificationMessage {
+            title: format!("🚨 批量服务告警 - {} 个服务异常", alerts.len()),
+            content,
+            service_name: "batch_alert".to_string(),
+            service_url: "batch".to_string(),
+            message_type: MessageType::Alert,
+        };
+
+        notifier.send_message(&message).await
+    }
+
+    /// 发送批量恢复通知
+    async fn send_batch_recovery(
+        notifier: &Arc<dyn NotificationSender>,
+        recoveries: &[BatchNotificationItem],
+    ) -> Result<()> {
+        let mut content = String::new();
+        content.push_str("✅ **批量服务恢复通知**\n\n");
+        content.push_str(&format!("**恢复时间**: {}\n", 
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")));
+        content.push_str(&format!("**恢复服务数量**: {}\n\n", recoveries.len()));
+
+        for (i, recovery) in recoveries.iter().enumerate() {
+            content.push_str(&format!("**{}. {}**\n", i + 1, recovery.service.name));
+            content.push_str(&format!("- **服务地址**: {}\n", recovery.service.url));
+            
+            if let Some(ref description) = recovery.service.description {
+                content.push_str(&format!("- **服务描述**: {}\n", description));
+            }
+            
+            content.push_str(&format!("- **HTTP状态码**: {}\n", 
+                recovery.result.status_code.map(|c| c.to_string()).unwrap_or_else(|| "N/A".to_string())));
+            content.push_str(&format!("- **响应时间**: {}ms\n", recovery.result.response_time_ms()));
+            content.push_str(&format!("- **检测方法**: {}\n", recovery.service.method));
+            content.push_str(&format!("- **服务状态**: 正常运行 ✅\n"));
+            
+            content.push_str("\n");
+        }
+
+        content.push_str("---\n");
+        content.push_str("*此通知由 Service Vitals 自动发送*");
+
+        let message = NotificationMessage {
+            title: format!("✅ 批量服务恢复 - {} 个服务已恢复", recoveries.len()),
+            content,
+            service_name: "batch_recovery".to_string(),
+            service_url: "batch".to_string(),
+            message_type: MessageType::Recovery,
+        };
+
+        notifier.send_message(&message).await
+    }
 }
 
 #[async_trait]
 impl Scheduler for TaskScheduler {
-    async fn start(&self, services: Vec<ServiceConfig>) -> Result<()> {
+    async fn start(&mut self, services: Vec<ServiceConfig>) -> Result<()> {
         info!("启动任务调度器，服务数量: {}", services.len());
+
+        // 启动批量通知任务
+        self.start_batch_notification_task().await;
 
         // 更新状态
         {
@@ -731,8 +909,11 @@ impl Scheduler for TaskScheduler {
         Ok(())
     }
 
-    async fn stop(&self) -> Result<()> {
+    async fn stop(&mut self) -> Result<()> {
         info!("停止任务调度器");
+
+        // 停止批量通知任务
+        self.stop_batch_notification_task().await;
 
         // 停止所有任务
         let mut tasks = self.tasks.write().await;

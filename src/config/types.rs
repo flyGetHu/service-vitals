@@ -82,7 +82,7 @@ pub struct ServiceConfig {
 
 // 默认值函数
 fn default_check_interval() -> u64 {
-    60
+    5 // 5秒检查间隔
 }
 fn default_log_level() -> String {
     "info".to_string()
