@@ -406,6 +406,34 @@ impl FeishuSender {
             serde_json::Value::Number(service.failure_threshold.into()),
         );
 
+        // 添加告警冷却时间
+        custom_fields.insert(
+            "alert_cooldown_secs".to_string(),
+            serde_json::Value::Number(service.alert_cooldown_secs.into()),
+        );
+
+        // 添加检测间隔
+        if let Some(check_interval) = service.check_interval_seconds {
+            custom_fields.insert(
+                "check_interval_secs".to_string(),
+                serde_json::Value::Number(check_interval.into()),
+            );
+        }
+
+        // 添加连续失败次数
+        custom_fields.insert(
+            "consecutive_failures".to_string(),
+            serde_json::Value::Number(result.consecutive_failures.into()),
+        );
+
+        // 添加响应体大小（如果有）
+        if let Some(response_size) = result.response_size {
+            custom_fields.insert(
+                "response_size_bytes".to_string(),
+                serde_json::Value::Number(response_size.into()),
+            );
+        }
+
         TemplateContext {
             service_name: service.name.clone(),
             service_url: service.url.clone(),

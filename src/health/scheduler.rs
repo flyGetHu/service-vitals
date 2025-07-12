@@ -34,6 +34,12 @@ pub struct ServiceNotificationState {
     pub next_alert_threshold: u32,
     /// 下次可告警的最早时间
     pub alert_cooldown_until: Option<Instant>,
+    /// 是否已经发送过告警通知（用于恢复通知判断）
+    pub has_sent_alert: bool,
+    /// 下次可发送恢复通知的最早时间
+    pub recovery_cooldown_until: Option<Instant>,
+    /// 上次恢复通知时间
+    pub last_recovery_notification_time: Option<Instant>,
 }
 
 /// 调度器状态
@@ -62,6 +68,10 @@ pub struct NotificationStats {
     pub failed_sent: u32,
     /// 最后通知时间
     pub last_notification_time: Option<Instant>,
+    /// 全局通知冷却时间（防止短时间内发送过多通知）
+    pub global_cooldown_until: Option<Instant>,
+    /// 最近1小时内的通知次数
+    pub recent_notifications: Vec<Instant>,
 }
 
 /// 任务调度器trait，定义调度接口
@@ -179,22 +189,46 @@ impl TaskScheduler {
         let is_healthy = current_status.is_healthy();
 
         // 1. 检查是否需要发送恢复通知
-        let need_recover_notify = is_healthy && notification_state.consecutive_failures > 0;
+        // 只有在之前发送过告警通知的情况下才发送恢复通知
+        let need_recover_notify = is_healthy 
+            && notification_state.consecutive_failures > 0 
+            && notification_state.has_sent_alert;
+        
         if need_recover_notify {
-            if let Some(ref notifier) = notifier {
-                let send_result = notifier.send_health_alert(service, result).await;
-                match send_result {
-                    Ok(()) => {
-                        info!("发送服务恢复通知成功: {}", service.name);
-                        Self::update_notification_stats_static(status_arc, true).await;
-                    }
-                    Err(e) => {
-                        error!("发送服务恢复通知失败: {} - {}", service.name, e);
-                        Self::update_notification_stats_static(status_arc, false).await;
+            // 检查恢复通知冷却时间（默认1分钟）
+            let recovery_cooldown_secs = service.alert_cooldown_secs / 5; // 告警冷却时间的1/5
+            let can_send_recovery = notification_state
+                .recovery_cooldown_until
+                .is_none_or(|until| now >= until);
+            
+            if can_send_recovery {
+                // 检查全局通知频率限制
+                if !Self::check_global_notification_rate_limit(status_arc).await {
+                    debug!("全局通知频率限制触发，跳过恢复通知发送: {}", service.name);
+                } else {
+                    if let Some(ref notifier) = notifier {
+                        let send_result = notifier.send_health_alert(service, result).await;
+                        match send_result {
+                            Ok(()) => {
+                                info!("发送服务恢复通知成功: {}", service.name);
+                                notification_state.last_recovery_notification_time = Some(now);
+                                notification_state.recovery_cooldown_until = 
+                                    Some(now + Duration::from_secs(recovery_cooldown_secs));
+                                Self::update_notification_stats_static(status_arc, true).await;
+                            }
+                            Err(e) => {
+                                error!("发送服务恢复通知失败: {} - {}", service.name, e);
+                                Self::update_notification_stats_static(status_arc, false).await;
+                            }
+                        }
                     }
                 }
+            } else {
+                debug!("服务 {} 恢复通知仍在冷却中，跳过发送", service.name);
             }
+            
             notification_state.consecutive_failures = 0;
+            notification_state.has_sent_alert = false; // 重置告警状态
             // 恢复时重置告警冷却时间
             notification_state.alert_cooldown_until = None;
         }
@@ -203,29 +237,37 @@ impl TaskScheduler {
         if !is_healthy {
             notification_state.consecutive_failures += 1;
             if notification_state.consecutive_failures >= service.failure_threshold {
-                let cooldown_secs = service.alert_cooldown_secs.unwrap_or(60); // 默认60秒
+                let cooldown_secs = service.alert_cooldown_secs; // 使用配置的冷却时间
                 let can_alert = notification_state
                     .alert_cooldown_until
                     .is_none_or(|until| now >= until);
                 if can_alert {
-                    if let Some(ref notifier) = notifier {
-                        let send_result = notifier.send_health_alert(service, result).await;
-                        match send_result {
-                            Ok(()) => {
-                                info!("发送服务告警通知成功: {}", service.name);
-                                notification_state.notification_count += 1;
-                                notification_state.last_notification_time = Some(now);
-                                Self::update_notification_stats_static(status_arc, true).await;
-                            }
-                            Err(e) => {
-                                error!("发送服务告警通知失败: {} - {}", service.name, e);
-                                Self::update_notification_stats_static(status_arc, false).await;
+                    // 检查全局通知频率限制
+                    if !Self::check_global_notification_rate_limit(status_arc).await {
+                        debug!("全局通知频率限制触发，跳过告警通知发送: {}", service.name);
+                    } else {
+                        if let Some(ref notifier) = notifier {
+                            let send_result = notifier.send_health_alert(service, result).await;
+                            match send_result {
+                                Ok(()) => {
+                                    info!("发送服务告警通知成功: {}", service.name);
+                                    notification_state.notification_count += 1;
+                                    notification_state.last_notification_time = Some(now);
+                                    notification_state.has_sent_alert = true; // 标记已发送告警
+                                    Self::update_notification_stats_static(status_arc, true).await;
+                                }
+                                Err(e) => {
+                                    error!("发送服务告警通知失败: {} - {}", service.name, e);
+                                    Self::update_notification_stats_static(status_arc, false).await;
+                                }
                             }
                         }
                     }
                     // 设置下次可告警的最早时间
                     notification_state.alert_cooldown_until =
                         Some(now + Duration::from_secs(cooldown_secs));
+                } else {
+                    debug!("服务 {} 告警通知仍在冷却中，跳过发送", service.name);
                 }
             }
         }
@@ -249,6 +291,38 @@ impl TaskScheduler {
             status.notification_stats.failed_sent += 1;
         }
         status.notification_stats.last_notification_time = Some(Instant::now());
+    }
+
+    /// 检查全局通知频率限制
+    async fn check_global_notification_rate_limit(
+        status_arc: &Arc<RwLock<SchedulerStatus>>,
+    ) -> bool {
+        let mut status = status_arc.write().await;
+        let now = Instant::now();
+        
+        // 清理超过1小时的通知记录
+        status.notification_stats.recent_notifications.retain(|&time| {
+            now.duration_since(time).as_secs() < 3600 // 1小时
+        });
+        
+        // 检查全局冷却时间
+        if let Some(cooldown_until) = status.notification_stats.global_cooldown_until {
+            if now < cooldown_until {
+                return false; // 仍在全局冷却中
+            }
+        }
+        
+        // 检查最近1小时内的通知次数（限制最多10次）
+        if status.notification_stats.recent_notifications.len() >= 10 {
+            // 设置全局冷却时间（30分钟）
+            status.notification_stats.global_cooldown_until = 
+                Some(now + Duration::from_secs(1800));
+            return false;
+        }
+        
+        // 记录本次通知
+        status.notification_stats.recent_notifications.push(now);
+        true
     }
 
     /// 启动单个服务的检测任务

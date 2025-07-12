@@ -75,8 +75,9 @@ pub struct ServiceConfig {
     pub headers: HashMap<String, String>,
     /// 请求体（用于POST/PUT请求）
     pub body: Option<serde_json::Value>,
-    /// 告警冷却时间（秒，时间退避，默认300）
-    pub alert_cooldown_secs: Option<u64>,
+    /// 告警冷却时间（秒，时间退避，默认300秒）
+    #[serde(default = "default_alert_cooldown")]
+    pub alert_cooldown_secs: u64,
 }
 
 // 默认值函数
@@ -106,6 +107,10 @@ fn default_failure_threshold() -> u32 {
 }
 fn default_enabled() -> bool {
     true
+}
+
+fn default_alert_cooldown() -> u64 {
+    300 // 5分钟默认冷却时间
 }
 
 /// 配置验证函数

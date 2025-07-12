@@ -238,52 +238,61 @@ fn status_emoji_helper(
 
 /// 默认的告警消息模板
 pub fn default_alert_template() -> String {
-    r#"🚨 **服务告警**
+    r#"🚨 **服务告警通知**
 
-**基本信息**
+**服务信息**
 - **服务名称**: {{service_name}}
-- **服务URL**: {{service_url}}
+- **服务地址**: {{service_url}}
 {{#if service_description}}
 - **服务描述**: {{service_description}}
 {{/if}}
 
-**检测结果**
-- **状态码**: {{#if status_code}}{{status_code}}{{else}}N/A{{/if}}
-- **响应时间**: {{response_time}}ms
+**检测详情**
 - **检测时间**: {{timestamp}}
-- **健康状态**: {{status_emoji health_status}} {{health_status}}
+- **HTTP状态码**: {{#if status_code}}{{status_code}}{{else}}连接失败{{/if}}
+- **响应时间**: {{response_time}}ms
+- **检测方法**: {{http_method}}
+- **失败阈值**: {{failure_threshold}}次
 
 {{#if error_message}}
-**错误详情**
+**错误信息**
 ```
 {{error_message}}
 ```
 {{/if}}
 
+**建议操作**
+1. 检查服务是否正常运行
+2. 查看服务器日志
+3. 验证网络连接
+4. 检查配置是否正确
+
 ---
-*Service Vitals 自动监控*"#
+*此通知由 Service Vitals 自动发送，下次告警将在 {{alert_cooldown_secs}} 秒后发送*"#
         .to_string()
 }
 
 /// 默认的恢复消息模板
 pub fn default_recovery_template() -> String {
-    r#"✅ **服务恢复**
+    r#"✅ **服务恢复通知**
 
-**基本信息**
+**服务信息**
 - **服务名称**: {{service_name}}
-- **服务URL**: {{service_url}}
+- **服务地址**: {{service_url}}
 {{#if service_description}}
 - **服务描述**: {{service_description}}
 {{/if}}
 
 **恢复详情**
-- **状态码**: {{status_code}}
-- **响应时间**: {{response_time}}ms
 - **恢复时间**: {{timestamp}}
-- **健康状态**: {{status_emoji true}} 正常
+- **HTTP状态码**: {{status_code}}
+- **响应时间**: {{response_time}}ms
+- **检测方法**: {{http_method}}
+
+**服务状态**: 正常运行 ✅
 
 ---
-*Service Vitals 自动监控*"#
+*此通知由 Service Vitals 自动发送*"#
         .to_string()
 }
 
