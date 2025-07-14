@@ -7,6 +7,6 @@ pub mod logging;
 pub mod status;
 
 // 重新导出主要类型
-pub use error::{ServiceVitalsError, Result, ErrorSeverity, RecoveryStrategy, ErrorContext};
+pub use error::{ErrorContext, ErrorSeverity, RecoveryStrategy, Result, ServiceVitalsError};
 pub use logging::{LogConfig, LoggingSystem};
 pub use status::{ServiceStatus, StatusManager};

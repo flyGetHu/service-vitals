@@ -22,8 +22,8 @@ pub mod core;
 pub mod common;
 
 // 重新导出主要类型
-pub use config::{Config, GlobalConfig, ServiceConfig};
 pub use common::error::ServiceVitalsError;
+pub use config::{Config, GlobalConfig, ServiceConfig};
 pub use health::{HealthChecker, HealthResult, HealthStatus};
 
 /// 应用程序版本信息

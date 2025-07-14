@@ -4,16 +4,20 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use service_vitals::health::{HealthResult, HealthStatus};
-use service_vitals::notification::template::{HandlebarsTemplate, MessageTemplate, TemplateContext};
+use service_vitals::notification::template::{
+    HandlebarsTemplate, MessageTemplate, TemplateContext,
+};
 use std::time::Duration;
 
 /// 通知处理基准测试
 fn notification_benchmark(c: &mut Criterion) {
     c.bench_function("template_rendering", |b| {
         let template = HandlebarsTemplate::new(
-            "服务 {{service_name}} 状态异常\nURL: {{service_url}}\n响应时间: {{response_time}}ms".to_string()
-        ).unwrap();
-        
+            "服务 {{service_name}} 状态异常\nURL: {{service_url}}\n响应时间: {{response_time}}ms"
+                .to_string(),
+        )
+        .unwrap();
+
         let context = TemplateContext {
             service_name: "test-service".to_string(),
             service_url: "https://httpbin.org/status/500".to_string(),
@@ -23,7 +27,7 @@ fn notification_benchmark(c: &mut Criterion) {
             error_message: Some("Connection timeout".to_string()),
             custom_fields: std::collections::HashMap::new(),
         };
-        
+
         b.iter(|| {
             let message = template.render(&context).unwrap();
             black_box(message)
@@ -44,9 +48,11 @@ fn notification_benchmark(c: &mut Criterion) {
 **错误信息**: {{error_message}}
 {{/if}}
 
-请及时检查服务状态！"#.to_string()
-        ).unwrap();
-        
+请及时检查服务状态！"#
+                .to_string(),
+        )
+        .unwrap();
+
         let context = TemplateContext {
             service_name: "production-api".to_string(),
             service_url: "https://api.example.com/health".to_string(),
@@ -56,7 +62,7 @@ fn notification_benchmark(c: &mut Criterion) {
             error_message: Some("Service unavailable".to_string()),
             custom_fields: std::collections::HashMap::new(),
         };
-        
+
         b.iter(|| {
             let message = template.render(&context).unwrap();
             black_box(message)
@@ -65,9 +71,9 @@ fn notification_benchmark(c: &mut Criterion) {
 
     c.bench_function("template_creation", |b| {
         b.iter(|| {
-            let template = HandlebarsTemplate::new(
-                "服务 {{service_name}} 状态: {{status}}".to_string()
-            ).unwrap();
+            let template =
+                HandlebarsTemplate::new("服务 {{service_name}} 状态: {{status}}".to_string())
+                    .unwrap();
             black_box(template)
         });
     });
@@ -83,7 +89,7 @@ fn notification_benchmark(c: &mut Criterion) {
         .with_response_time(Duration::from_millis(250))
         .with_error("Connection timeout".to_string())
         .with_consecutive_failures(2);
-        
+
         b.iter(|| {
             let data = serde_json::to_value(&result).unwrap();
             black_box(data)

@@ -3,8 +3,8 @@
 //! 测试配置解析、验证和序列化的性能
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use service_vitals::config::{Config, GlobalConfig, ServiceConfig};
 use service_vitals::config::types::WebConfig;
+use service_vitals::config::{Config, GlobalConfig, ServiceConfig};
 use std::collections::HashMap;
 
 /// 配置处理基准测试
@@ -12,7 +12,9 @@ fn config_processing_benchmark(c: &mut Criterion) {
     c.bench_function("config_creation", |b| {
         b.iter(|| {
             let global_config = GlobalConfig {
-                default_feishu_webhook_url: Some("https://open.feishu.cn/open-apis/bot/v2/hook/xxx".to_string()),
+                default_feishu_webhook_url: Some(
+                    "https://open.feishu.cn/open-apis/bot/v2/hook/xxx".to_string(),
+                ),
                 message_template: Some("服务 {{service_name}} 状态异常".to_string()),
                 check_interval_seconds: 60,
                 log_level: "info".to_string(),
@@ -50,14 +52,14 @@ fn config_processing_benchmark(c: &mut Criterion) {
                 global: global_config,
                 services: vec![service_config],
             };
-            
+
             black_box(config)
         });
     });
 
     c.bench_function("config_serialization", |b| {
         let config = create_test_config();
-        
+
         b.iter(|| {
             let toml = toml::to_string(&config).unwrap();
             black_box(toml)
@@ -93,7 +95,7 @@ failure_threshold = 1
 enabled = true
 description = "测试服务"
 "#;
-        
+
         b.iter(|| {
             let config: Config = toml::from_str(toml_str).unwrap();
             black_box(config)
@@ -102,7 +104,7 @@ description = "测试服务"
 
     c.bench_function("config_validation", |b| {
         let config = create_test_config();
-        
+
         b.iter(|| {
             let result = service_vitals::config::validate_config(&config);
             black_box(result)
@@ -113,7 +115,9 @@ description = "测试服务"
 /// 创建测试配置
 fn create_test_config() -> Config {
     let global_config = GlobalConfig {
-        default_feishu_webhook_url: Some("https://open.feishu.cn/open-apis/bot/v2/hook/xxx".to_string()),
+        default_feishu_webhook_url: Some(
+            "https://open.feishu.cn/open-apis/bot/v2/hook/xxx".to_string(),
+        ),
         message_template: Some("服务 {{service_name}} 状态异常".to_string()),
         check_interval_seconds: 60,
         log_level: "info".to_string(),
