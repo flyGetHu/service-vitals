@@ -2,10 +2,10 @@
 //!
 //! 提供跨平台的服务管理功能统一接口
 
+use crate::common::error::Result;
 #[cfg(unix)]
 use crate::daemon::PlatformDaemonManager;
 use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus};
-use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 

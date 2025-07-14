@@ -3,8 +3,8 @@
 //! 测试健康检测器的性能和并发处理能力
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use service_vitals::health::{HttpHealthChecker, HealthResult, HealthStatus};
 use service_vitals::config::ServiceConfig;
+use service_vitals::health::{HealthResult, HealthStatus};
 use std::time::Duration;
 
 /// 健康检测器基准测试
@@ -56,7 +56,7 @@ fn health_result_processing_benchmark(c: &mut Criterion) {
             )
             .with_status_code(200)
             .with_response_time(Duration::from_millis(150));
-            
+
             let json = serde_json::to_string(&result).unwrap();
             black_box(json)
         });
@@ -77,7 +77,7 @@ fn health_result_processing_benchmark(c: &mut Criterion) {
             "response_size": null,
             "metadata": {}
         }"#;
-        
+
         b.iter(|| {
             let result: HealthResult = serde_json::from_str(json).unwrap();
             black_box(result)

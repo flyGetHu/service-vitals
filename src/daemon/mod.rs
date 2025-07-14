@@ -2,7 +2,7 @@
 //!
 //! 提供跨平台的守护进程和系统服务支持
 
-use crate::error::Result;
+use crate::common::error::Result;
 use async_trait::async_trait;
 use std::path::PathBuf;
 use tokio::sync::broadcast;

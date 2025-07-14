@@ -2,16 +2,16 @@
 //!
 //! 包含主函数、命令执行和应用程序生命周期管理
 
-use anyhow::{Context, Result};
-use clap::Parser;
-use service_vitals::cli::args::{Args, Commands};
-use service_vitals::cli::commands::{
+use crate::cli::args::{Args, Commands};
+use crate::cli::commands::{
     CheckCommand, Command, InitCommand, InstallCommand, RestartServiceCommand,
     ServiceStatusCommand, StartServiceCommand, StatusCommand, StopCommand, StopServiceCommand,
     TestNotificationCommand, UninstallCommand, ValidateCommand, VersionCommand,
 };
-use service_vitals::logging::{LogConfig, LoggingSystem};
-use service_vitals::core::service::ServiceManager;
+use crate::common::logging::{LogConfig, LoggingSystem};
+use crate::core::service::ServiceManager;
+use anyhow::{Context, Result};
+use clap::Parser;
 use std::time::Duration;
 use tracing::{error, info};
 
@@ -30,7 +30,7 @@ pub async fn main() -> Result<()> {
 
     let _logging_system = LoggingSystem::setup_logging(log_config).context("初始化日志系统失败")?;
 
-    info!("Service Vitals v{} 启动", service_vitals::VERSION);
+    info!("Service Vitals v{} 启动", crate::VERSION);
 
     // 执行命令
     if let Err(e) = execute_command(&args).await {
@@ -54,7 +54,10 @@ pub async fn execute_command(args: &Args) -> Result<()> {
             timeout: _,
         } => {
             let command = StopCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::Restart {
             foreground: _,
@@ -74,7 +77,10 @@ pub async fn execute_command(args: &Args) -> Result<()> {
             verbose: _,
         } => {
             let command = StatusCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::Check {
             service: _,
@@ -82,7 +88,10 @@ pub async fn execute_command(args: &Args) -> Result<()> {
             timeout: _,
         } => {
             let command = CheckCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::Init {
             config_path: _,
@@ -90,49 +99,79 @@ pub async fn execute_command(args: &Args) -> Result<()> {
             template: _,
         } => {
             let command = InitCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::Validate {
             config_path: _,
             verbose: _,
         } => {
             let command = ValidateCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::Version { format: _ } => {
             let command = VersionCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::TestNotification {
             notification_type: _,
             message: _,
         } => {
             let command = TestNotificationCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::Install { .. } => {
             let command = InstallCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::Uninstall { .. } => {
             let command = UninstallCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::StartService { .. } => {
             let command = StartServiceCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::StopService { .. } => {
             let command = StopServiceCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::RestartService { .. } => {
             let command = RestartServiceCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
         Commands::ServiceStatus { .. } => {
             let command = ServiceStatusCommand;
-            command.execute(args).await.map_err(|e| anyhow::anyhow!(e))
+            command
+                .execute(args)
+                .await
+                .map_err(|e: crate::common::error::ServiceVitalsError| anyhow::anyhow!(e))
         }
     }
 }

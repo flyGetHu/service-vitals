@@ -2,8 +2,8 @@
 //!
 //! 提供HTTP健康检测功能，支持多种HTTP方法和超时处理
 
+use crate::common::error::{HealthCheckError, Result};
 use crate::config::ServiceConfig;
-use crate::error::{HealthCheckError, Result};
 use crate::health::result::{HealthResult, HealthStatus};
 use async_trait::async_trait;
 use reqwest::{Client, Method, Response};

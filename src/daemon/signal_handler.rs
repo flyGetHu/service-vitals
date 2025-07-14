@@ -2,7 +2,7 @@
 //!
 //! 提供Linux/Unix信号处理和优雅关闭支持
 
-use crate::error::Result;
+use crate::common::error::Result;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 

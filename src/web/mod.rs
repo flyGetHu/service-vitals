@@ -4,10 +4,10 @@
 
 pub mod handlers;
 
+use crate::common::error::{Result, ServiceVitalsError};
+use crate::common::status::ServiceStatus;
 use crate::config::types::WebConfig;
-use crate::error::{Result, ServiceVitalsError};
 use crate::health::result::HealthStatus;
-use crate::status::ServiceStatus;
 use axum::{routing::get, Router};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -200,9 +200,9 @@ impl WebServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::status::ServiceStatus;
     use crate::config::types::WebConfig;
     use crate::health::HealthStatus;
-    use crate::status::ServiceStatus;
 
     #[tokio::test]
     async fn test_web_server_creation() {

@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Service Vitals - 监控面板</title>
     <style>
+      :root {
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        --danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --card-hover-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        --border-radius: 12px;
+        --border-radius-sm: 8px;
+        --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
       * {
         margin: 0;
         padding: 0;
@@ -12,11 +24,11 @@
       }
 
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          sans-serif;
-        background-color: #f5f5f5;
-        color: #333;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        color: #1f2937;
         line-height: 1.6;
+        min-height: 100vh;
       }
 
       .container {
@@ -26,23 +38,41 @@
       }
 
       .header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: var(--primary-gradient);
         color: white;
-        padding: 30px 0;
+        padding: 40px 0;
         margin-bottom: 30px;
-        border-radius: 10px;
+        border-radius: var(--border-radius);
         text-align: center;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        box-shadow: var(--card-shadow);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="50" cy="50" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+        pointer-events: none;
       }
 
       .header h1 {
         font-size: 2.5rem;
         margin-bottom: 10px;
+        font-weight: 700;
+        position: relative;
+        z-index: 1;
       }
 
       .header p {
         font-size: 1.1rem;
         opacity: 0.9;
+        position: relative;
+        z-index: 1;
       }
 
       .stats {
@@ -54,38 +84,174 @@
 
       .stat-card {
         background: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        padding: 30px 20px;
+        border-radius: var(--border-radius);
+        box-shadow: var(--card-shadow);
         text-align: center;
+        transition: var(--transition);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: var(--primary-gradient);
+        transform: scaleX(0);
+        transition: var(--transition);
+      }
+
+      .stat-card:hover::before {
+        transform: scaleX(1);
+      }
+
+      .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: var(--card-hover-shadow);
       }
 
       .stat-number {
-        font-size: 2rem;
-        font-weight: bold;
-        margin-bottom: 5px;
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+        background: var(--primary-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
 
       .stat-label {
-        color: #666;
+        color: #6b7280;
         font-size: 0.9rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
       }
 
-      .online {
-        color: #10b981;
+      .online .stat-number {
+        background: var(--success-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
-      .offline {
-        color: #ef4444;
+
+      .offline .stat-number {
+        background: var(--danger-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
-      .unknown {
-        color: #f59e0b;
+
+      .unknown .stat-number {
+        background: var(--warning-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
 
       .services-container {
         background: white;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-radius: var(--border-radius);
+        padding: 30px;
+        box-shadow: var(--card-shadow);
+        backdrop-filter: blur(10px);
+      }
+
+      .services-header {
+        margin-bottom: 25px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 20px;
+      }
+
+      .services-title {
+        margin: 0;
+        color: #111827;
+        font-size: 1.5rem;
+        font-weight: 700;
+      }
+
+      .controls {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .control-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .control-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: 500;
+      }
+
+      .select-wrapper {
+        position: relative;
+      }
+
+      .select-wrapper select {
+        appearance: none;
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: var(--border-radius-sm);
+        padding: 8px 32px 8px 12px;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: var(--transition);
+        min-width: 120px;
+      }
+
+      .select-wrapper::after {
+        content: '▼';
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 0.75rem;
+        color: #6b7280;
+        pointer-events: none;
+      }
+
+      .select-wrapper select:hover {
+        border-color: #9ca3af;
+      }
+
+      .select-wrapper select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      .checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        padding: 8px 12px;
+        border-radius: var(--border-radius-sm);
+        transition: var(--transition);
+      }
+
+      .checkbox-wrapper:hover {
+        background-color: #f3f4f6;
+      }
+
+      .checkbox-wrapper input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: #667eea;
+        cursor: pointer;
       }
 
       .services-grid {
@@ -96,96 +262,87 @@
       }
 
       .service-card {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 20px;
-        transition: all 0.3s ease;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: var(--border-radius);
+        padding: 24px;
+        transition: var(--transition);
         position: relative;
+        overflow: hidden;
+      }
+
+      .service-card::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        transition: var(--transition);
+      }
+
+      .service-card.online::before {
+        background: var(--success-gradient);
+      }
+
+      .service-card.offline::before {
+        background: var(--danger-gradient);
+      }
+
+      .service-card.unknown::before {
+        background: var(--warning-gradient);
       }
 
       .service-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      }
-
-      .service-card.offline {
-        border-left: 4px solid #ef4444;
-        background: #fef2f2;
-      }
-
-      .service-card.online {
-        border-left: 4px solid #10b981;
-        background: #f0fdf4;
-      }
-
-      .service-card.unknown {
-        border-left: 4px solid #f59e0b;
-        background: #fffbeb;
+        transform: translateY(-4px);
+        box-shadow: var(--card-hover-shadow);
+        border-color: #d1d5db;
       }
 
       .card-header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        margin-bottom: 15px;
+        margin-bottom: 20px;
+      }
+
+      .service-info {
+        flex: 1;
+        min-width: 0;
       }
 
       .service-name {
-        font-size: 1.2rem;
-        font-weight: 600;
-        color: #1f2937;
-        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #111827;
+        margin: 0 0 4px 0;
+        line-height: 1.3;
       }
 
       .service-url {
         color: #3b82f6;
         text-decoration: none;
-        font-size: 0.9rem;
+        font-size: 0.875rem;
         word-break: break-all;
-        margin-top: 5px;
         display: block;
+        transition: var(--transition);
       }
 
       .service-url:hover {
+        color: #1d4ed8;
         text-decoration: underline;
       }
 
-      .card-content {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 15px;
-        margin-top: 15px;
-      }
-
-      .card-field {
-        display: flex;
-        flex-direction: column;
-      }
-
-      .field-label {
-        font-size: 0.8rem;
-        color: #6b7280;
-        font-weight: 500;
-        margin-bottom: 4px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .field-value {
-        font-size: 0.95rem;
-        color: #1f2937;
-        font-weight: 500;
-      }
-
       .status-badge {
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
         padding: 6px 12px;
-        border-radius: 20px;
-        font-size: 0.8rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
       }
 
       .status-online {
@@ -203,38 +360,56 @@
         color: #92400e;
       }
 
-      .url-link {
-        color: #3b82f6;
-        text-decoration: none;
+      .card-content {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 16px;
       }
 
-      .url-link:hover {
-        text-decoration: underline;
+      .card-field {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .field-label {
+        font-size: 0.75rem;
+        color: #6b7280;
+        font-weight: 600;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .field-value {
+        font-size: 0.875rem;
+        color: #111827;
+        font-weight: 500;
       }
 
       .error-message {
-        margin-top: 15px;
-        padding: 12px;
+        margin-top: 16px;
+        padding: 12px 16px;
         background-color: #fef2f2;
         border: 1px solid #fecaca;
-        border-radius: 6px;
+        border-radius: var(--border-radius-sm);
         color: #991b1b;
-        font-size: 0.9rem;
-        line-height: 1.4;
+        font-size: 0.875rem;
+        line-height: 1.5;
       }
 
       .error-title {
-        font-size: 0.8rem;
-        font-weight: 600;
+        font-size: 0.75rem;
+        font-weight: 700;
         color: #991b1b;
-        margin-bottom: 8px;
+        margin-bottom: 4px;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.05em;
       }
 
       .error-content {
         color: #991b1b;
-        font-size: 0.85rem;
+        font-size: 0.8125rem;
         line-height: 1.4;
         word-break: break-word;
       }
@@ -243,14 +418,23 @@
         position: fixed;
         top: 20px;
         right: 20px;
-        background: #3b82f6;
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
         color: white;
-        padding: 10px 15px;
-        border-radius: 5px;
-        font-size: 0.9rem;
+        padding: 12px 16px;
+        border-radius: var(--border-radius);
+        font-size: 0.875rem;
         display: flex;
         align-items: center;
         gap: 8px;
+        box-shadow: var(--card-shadow);
+        backdrop-filter: blur(10px);
+        z-index: 1000;
+        transition: var(--transition);
+      }
+
+      .auto-refresh:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--card-hover-shadow);
       }
 
       .loading-indicator {
@@ -264,99 +448,192 @@
       }
 
       @keyframes spin {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
       }
 
       .page-error-message {
         background-color: #fee2e2;
         color: #991b1b;
-        padding: 10px;
-        border-radius: 5px;
+        padding: 16px;
+        border-radius: var(--border-radius);
         margin-bottom: 20px;
         display: none;
+        border-left: 4px solid #dc2626;
       }
 
       .fade-in {
-        animation: fadeIn 0.3s ease-in;
+        animation: fadeIn 0.3s ease-out;
       }
 
       @keyframes fadeIn {
         from {
           opacity: 0;
+          transform: translateY(10px);
         }
         to {
           opacity: 1;
+          transform: translateY(0);
         }
       }
 
+      /* 移动端优化 */
       @media (max-width: 768px) {
         .container {
-          padding: 10px;
+          padding: 16px;
+        }
+
+        .header {
+          padding: 30px 20px;
+          margin-bottom: 20px;
         }
 
         .header h1 {
           font-size: 2rem;
         }
 
+        .stats {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+        }
+
+        .stat-card {
+          padding: 20px 16px;
+        }
+
+        .stat-number {
+          font-size: 2rem;
+        }
+
+        .services-container {
+          padding: 20px;
+        }
+
+        .services-header {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 16px;
+        }
+
+        .services-title {
+          font-size: 1.375rem;
+        }
+
+        .controls {
+          justify-content: space-between;
+          width: 100%;
+        }
+
         .services-grid {
           grid-template-columns: 1fr;
-          gap: 15px;
+          gap: 16px;
         }
 
         .service-card {
-          padding: 15px;
+          padding: 20px;
         }
 
         .card-content {
           grid-template-columns: 1fr;
-          gap: 10px;
-        }
-
-        .service-name {
-          font-size: 1.1rem;
-        }
-
-        .stats {
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 12px;
         }
 
         .auto-refresh {
           position: static;
-          margin-bottom: 15px;
+          margin-bottom: 20px;
           justify-content: center;
+          width: 100%;
         }
       }
 
       @media (max-width: 480px) {
-        .services-grid {
-          grid-template-columns: 1fr;
-          gap: 10px;
-        }
-
-        .service-card {
+        .container {
           padding: 12px;
         }
 
-        .card-header {
-          flex-direction: column;
-          align-items: flex-start;
+        .header {
+          padding: 24px 16px;
+        }
+
+        .header h1 {
+          font-size: 1.75rem;
+        }
+
+        .stats {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+
+        .services-container {
+          padding: 16px;
+        }
+
+        .service-card {
+          padding: 16px;
         }
 
         .service-name {
-          font-size: 1rem;
+          font-size: 1.125rem;
+        }
+
+        .controls {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+        }
+
+        .control-group {
+          justify-content: space-between;
+        }
+      }
+
+      /* 暗色模式支持 */
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+          color: #f9fafb;
+        }
+
+        .stat-card,
+        .services-container,
+        .service-card {
+          background: #374151;
+          border-color: #4b5563;
+          color: #f9fafb;
+        }
+
+        .service-name {
+          color: #f9fafb;
+        }
+
+        .field-value {
+          color: #f9fafb;
+        }
+
+        .select-wrapper select {
+          background: #374151;
+          border-color: #4b5563;
+          color: #f9fafb;
+        }
+      }
+
+      /* 触摸设备优化 */
+      @media (hover: none) and (pointer: coarse) {
+        .service-card:hover {
+          transform: none;
+          box-shadow: var(--card-shadow);
+        }
+
+        .stat-card:hover {
+          transform: none;
+          box-shadow: var(--card-shadow);
         }
       }
     </style>
   </head>
   <body>
     <div class="auto-refresh">
-      🔄 自动刷新: 每<span id="refresh-interval">{{ refresh_interval }}</span
-      >秒更新
+      🔄 自动刷新: 每<span id="refresh-interval">{{ refresh_interval }}</span>秒更新
       <div class="loading-indicator"></div>
     </div>
 
@@ -370,86 +647,41 @@
 
       <div class="stats">
         <div class="stat-card">
-          <div class="stat-number" id="total-services">
-            {{ services.len() }}
-          </div>
+          <div class="stat-number" id="total-services">{{ services.len() }}</div>
           <div class="stat-label">总服务数</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-number online" id="online-services">
-            {{ online_count }}
-          </div>
+        <div class="stat-card online">
+          <div class="stat-number" id="online-services">{{ online_count }}</div>
           <div class="stat-label">在线服务</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-number offline" id="offline-services">
-            {{ offline_count }}
-          </div>
+        <div class="stat-card offline">
+          <div class="stat-number" id="offline-services">{{ offline_count }}</div>
           <div class="stat-label">离线服务</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-number unknown" id="unknown-services">
-            {{ unknown_count }}
-          </div>
+        <div class="stat-card unknown">
+          <div class="stat-number" id="unknown-services">{{ unknown_count }}</div>
           <div class="stat-label">未知状态</div>
         </div>
       </div>
 
       <div class="services-container">
-        <div
-          style="
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          "
-        >
-          <h2 style="margin: 0; color: #374151">服务状态</h2>
-          <div style="display: flex; gap: 16px; align-items: center">
-            <!-- 排序选择器 -->
-            <div>
-              <label style="display: flex; align-items: center; gap: 8px">
-                <span style="font-size: 0.9rem; color: #6b7280">排序方式:</span>
-                <select
-                  id="sort-selector"
-                  style="
-                    padding: 4px 8px;
-                    border: 1px solid #d1d5db;
-                    border-radius: 4px;
-                    font-size: 0.9rem;
-                    background: white;
-                  "
-                >
+        <div class="services-header">
+          <h2 class="services-title">服务状态</h2>
+          <div class="controls">
+            <div class="control-group">
+              <label class="control-label">排序方式:</label>
+              <div class="select-wrapper">
+                <select id="sort-selector">
                   <option value="name">按名称</option>
                   <option value="status">按状态</option>
                   <option value="response_time" selected>按响应时间</option>
                 </select>
-              </label>
+              </div>
             </div>
-
-            <!-- 过滤器 -->
-            <div>
-              <label
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 8px;
-                  cursor: pointer;
-                "
-              >
-                <input
-                  type="checkbox"
-                  id="show-problems-only"
-                  {%
-                  if
-                  show_problems_only
-                  %}checked{%
-                  endif
-                  %}
-                />
-                <span style="font-size: 0.9rem; color: #6b7280"
-                  >只显示离线服务</span
-                >
+            <div class="control-group">
+              <label class="checkbox-wrapper">
+                <input type="checkbox" id="show-problems-only" {% if show_problems_only %}checked{% endif %} />
+                <span>只显示离线服务</span>
               </label>
             </div>
           </div>
@@ -458,7 +690,7 @@
           {% for service in services %}
           <div class="service-card {{ service.status|lower }}">
             <div class="card-header">
-              <div>
+              <div class="service-info">
                 <h3 class="service-name">{{ service.name }}</h3>
                 {% if !service.url.is_empty() %}
                 <a href="{{ service.url }}" target="_blank" class="service-url">
@@ -475,22 +707,24 @@
               <div class="card-field">
                 <span class="field-label">响应延迟</span>
                 <span class="field-value">
-                  {% match service.response_time_ms %} {% when Some with (rt)
-                  %}{{ rt }}ms {% when None %}- {% endmatch %}
+                  {% match service.response_time_ms %}
+                    {% when Some with (rt) %}{{ rt }}ms
+                    {% when None %}- 
+                  {% endmatch %}
                 </span>
               </div>
               <div class="card-field">
                 <span class="field-label">最后检查</span>
                 <span class="field-value">
-                  {% match service.last_check %} {% when Some with (last_check)
-                  %}{{ last_check.format("%H:%M:%S") }} {% when None %}- {%
-                  endmatch %}
+                  {% match service.last_check %}
+                    {% when Some with (last_check) %}{{ last_check.format("%H:%M:%S") }}
+                    {% when None %}- 
+                  {% endmatch %}
                 </span>
               </div>
             </div>
 
-            {% if service.error_message.is_some() && (service.status ==
-            "Offline" || service.status == "Unknown") %}
+            {% if service.error_message.is_some() && (service.status == "Offline" || service.status == "Unknown") %}
             <div class="error-message">
               <div class="error-title">错误详情</div>
               <div class="error-content">
@@ -505,23 +739,21 @@
     </div>
 
     <script>
+      // 原有的JavaScript逻辑保持不变
       let isLoading = false;
       let errorCount = 0;
       const maxErrors = 5;
-      // 从页面元素获取刷新间隔配置，避免模板语法问题
-      let refreshInterval = 3000; // 默认3秒
+      let refreshInterval = 3000;
       let refreshTimer = null;
       let showProblemsOnly = false;
-      let currentSortBy = "response_time"; // 默认按响应时间排序
+      let currentSortBy = "response_time";
 
-      // 显示/隐藏加载指示器
       function showLoading(show) {
         const indicator = document.querySelector(".loading-indicator");
         indicator.style.display = show ? "block" : "none";
         isLoading = show;
       }
 
-      // 显示错误消息
       function showError(message) {
         const errorDiv = document.getElementById("error-message");
         errorDiv.textContent = message;
@@ -531,7 +763,6 @@
         }, 5000);
       }
 
-      // 格式化时间
       function formatDateTime(dateString) {
         const date = new Date(dateString);
         return date.toLocaleString("zh-CN", {
@@ -544,24 +775,15 @@
         });
       }
 
-      // 更新统计数据
       function updateStats(data) {
-        document.getElementById("total-services").textContent =
-          data.total_services;
-        document.getElementById("online-services").textContent =
-          data.online_services;
-        document.getElementById("offline-services").textContent =
-          data.offline_services;
-        document.getElementById("unknown-services").textContent =
-          data.unknown_services || 0;
-        document.getElementById(
-          "last-updated"
-        ).textContent = `实时服务监控面板 - 最后更新: ${formatDateTime(
-          data.last_updated
-        )}`;
+        document.getElementById("total-services").textContent = data.total_services;
+        document.getElementById("online-services").textContent = data.online_services;
+        document.getElementById("offline-services").textContent = data.offline_services;
+        document.getElementById("unknown-services").textContent = data.unknown_services || 0;
+        document.getElementById("last-updated").textContent = 
+          `实时服务监控面板 - 最后更新: ${formatDateTime(data.last_updated)}`;
       }
 
-      // 排序服务列表
       function sortServices(services, sortBy) {
         const sortedServices = [...services];
 
@@ -570,7 +792,6 @@
             sortedServices.sort((a, b) => a.name.localeCompare(b.name));
             break;
           case "status":
-            // 按状态优先级排序：Offline > Unknown > Online
             const statusPriority = { Offline: 0, Unknown: 1, Online: 2 };
             sortedServices.sort((a, b) => {
               const priorityA = statusPriority[a.status] ?? 3;
@@ -578,50 +799,38 @@
               if (priorityA !== priorityB) {
                 return priorityA - priorityB;
               }
-              // 相同状态按名称排序
               return a.name.localeCompare(b.name);
             });
             break;
           case "response_time":
-            // 按响应时间倒序排列（响应时间长的排在前面）
             sortedServices.sort((a, b) => {
               const timeA = a.response_time_ms ?? 0;
               const timeB = b.response_time_ms ?? 0;
-
-              // 如果一个有响应时间，一个没有，没有的排在后面
               if (timeA === 0 && timeB > 0) return 1;
               if (timeB === 0 && timeA > 0) return -1;
               if (timeA === 0 && timeB === 0) {
-                // 都没有响应时间，按名称排序
                 return a.name.localeCompare(b.name);
               }
-
-              // 都有响应时间，按倒序排列（时间长的在前）
               return timeB - timeA;
             });
             break;
           default:
-            // 默认按名称排序
             sortedServices.sort((a, b) => a.name.localeCompare(b.name));
         }
 
         return sortedServices;
       }
 
-      // 更新服务卡片
       function updateServicesGrid(services) {
         const grid = document.getElementById("services-grid");
         grid.innerHTML = "";
 
-        // 1. 先排序
         let sortedServices = sortServices(services, currentSortBy);
-
-        // 2. 再过滤
         let filteredServices = sortedServices;
+        
         if (showProblemsOnly) {
           filteredServices = sortedServices.filter(
-            (service) =>
-              service.status === "Offline" || service.status === "Unknown"
+            (service) => service.status === "Offline" || service.status === "Unknown"
           );
         }
 
@@ -629,66 +838,49 @@
           const card = document.createElement("div");
           card.className = `service-card ${service.status.toLowerCase()} fade-in`;
 
-          // 构建错误详情HTML
           let errorHtml = "";
-          if (
-            service.error_message &&
-            (service.status === "Offline" || service.status === "Unknown")
-          ) {
+          if (service.error_message && (service.status === "Offline" || service.status === "Unknown")) {
             errorHtml = `
-                      <div class="error-message">
-                          <div class="error-title">错误详情</div>
-                          <div class="error-content">${service.error_message}</div>
-                      </div>
-                  `;
+              <div class="error-message">
+                <div class="error-title">错误详情</div>
+                <div class="error-content">${service.error_message}</div>
+              </div>
+            `;
           }
 
           card.innerHTML = `
-                  <div class="card-header">
-                      <div>
-                          <h3 class="service-name">${service.name}</h3>
-                          ${
-                            service.url
-                              ? `<a href="${service.url}" target="_blank" class="service-url">${service.url}</a>`
-                              : ""
-                          }
-                      </div>
-                      <span class="status-badge status-${service.status.toLowerCase()}">
-                          ${service.status}
-                      </span>
-                  </div>
+            <div class="card-header">
+              <div class="service-info">
+                <h3 class="service-name">${service.name}</h3>
+                ${service.url ? `<a href="${service.url}" target="_blank" class="service-url">${service.url}</a>` : ""}
+              </div>
+              <span class="status-badge status-${service.status.toLowerCase()}">
+                ${service.status}
+              </span>
+            </div>
 
-                  <div class="card-content">
-                      <div class="card-field">
-                          <span class="field-label">响应延迟</span>
-                          <span class="field-value">
-                              ${
-                                service.response_time_ms
-                                  ? `${service.response_time_ms}ms`
-                                  : "-"
-                              }
-                          </span>
-                      </div>
-                      <div class="card-field">
-                          <span class="field-label">最后检查</span>
-                          <span class="field-value">
-                              ${
-                                service.last_check
-                                  ? formatTime(service.last_check)
-                                  : "-"
-                              }
-                          </span>
-                      </div>
-                  </div>
+            <div class="card-content">
+              <div class="card-field">
+                <span class="field-label">响应延迟</span>
+                <span class="field-value">
+                  ${service.response_time_ms ? `${service.response_time_ms}ms` : "-"}
+                </span>
+              </div>
+              <div class="card-field">
+                <span class="field-label">最后检查</span>
+                <span class="field-value">
+                  ${service.last_check ? formatTime(service.last_check) : "-"}
+                </span>
+              </div>
+            </div>
 
-                  ${errorHtml}
-              `;
+            ${errorHtml}
+          `;
 
           grid.appendChild(card);
         });
       }
 
-      // 格式化时间（仅显示时分秒）
       function formatTime(dateString) {
         const date = new Date(dateString);
         return date.toLocaleTimeString("zh-CN", {
@@ -698,16 +890,13 @@
         });
       }
 
-      // 获取最新数据
       async function fetchData() {
         if (isLoading) return;
 
         try {
           showLoading(true);
-
-          // 添加超时控制
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
 
           const response = await fetch("/api/v1/status", {
             signal: controller.signal,
@@ -725,19 +914,14 @@
 
           const data = await response.json();
 
-          // 验证数据格式
           if (!data || typeof data !== "object") {
             throw new Error("无效的响应数据格式");
           }
 
-          // 更新页面内容
           updateStats(data);
           updateServicesGrid(data.services || []);
-
-          // 重置错误计数
           errorCount = 0;
 
-          // 隐藏错误消息
           const errorDiv = document.getElementById("error-message");
           if (errorDiv.style.display !== "none") {
             errorDiv.style.display = "none";
@@ -753,13 +937,10 @@
             errorMessage = error.message;
           }
 
-          // 改进错误处理：不要因为连续失败就停止刷新
           if (errorCount <= maxErrors) {
             showError(`${errorMessage} (${errorCount}/${maxErrors})`);
           } else {
-            // 即使连续失败，也继续尝试，但降低频率
             showError("连续获取数据失败，将继续尝试...");
-            // 重置错误计数，避免永久停止
             if (errorCount > maxErrors * 2) {
               errorCount = Math.floor(maxErrors / 2);
             }
@@ -769,7 +950,6 @@
         }
       }
 
-      // 启动定时刷新
       function startRefreshTimer() {
         if (refreshTimer) {
           clearInterval(refreshTimer);
@@ -777,7 +957,6 @@
         refreshTimer = setInterval(fetchData, refreshInterval);
       }
 
-      // 停止定时刷新
       function stopRefreshTimer() {
         if (refreshTimer) {
           clearInterval(refreshTimer);
@@ -785,55 +964,43 @@
         }
       }
 
-      // 页面加载完成后开始定时更新
       document.addEventListener("DOMContentLoaded", function () {
-        // 从页面元素获取刷新间隔配置
         const intervalElement = document.getElementById("refresh-interval");
         if (intervalElement) {
           refreshInterval = parseInt(intervalElement.textContent) * 1000;
         }
 
-        // 初始化过滤器状态
         const filterCheckbox = document.getElementById("show-problems-only");
         if (filterCheckbox) {
           showProblemsOnly = filterCheckbox.checked;
           filterCheckbox.addEventListener("change", function () {
             showProblemsOnly = this.checked;
-            fetchData(); // 重新获取数据以应用过滤
+            fetchData();
           });
         }
 
-        // 初始化排序选择器
         const sortSelector = document.getElementById("sort-selector");
         if (sortSelector) {
           currentSortBy = sortSelector.value;
           sortSelector.addEventListener("change", function () {
             currentSortBy = this.value;
-            fetchData(); // 重新获取数据以应用新的排序
+            fetchData();
           });
         }
 
-        // 立即获取一次数据
         fetchData();
-
-        // 启动定时刷新
         startRefreshTimer();
       });
 
-      // 页面可见性变化时控制刷新
       document.addEventListener("visibilitychange", function () {
         if (document.hidden) {
-          // 页面隐藏时停止刷新以节省资源
           stopRefreshTimer();
         } else {
-          // 页面重新可见时恢复刷新
           startRefreshTimer();
-          // 立即刷新一次以获取最新数据
-          setTimeout(fetchData, 100); // 稍微延迟以确保页面完全可见
+          setTimeout(fetchData, 100);
         }
       });
 
-      // 窗口获得焦点时也刷新数据
       window.addEventListener("focus", function () {
         if (!document.hidden) {
           fetchData();

@@ -2,8 +2,8 @@
 //!
 //! 提供TOML配置文件解析、环境变量替换和错误处理功能
 
+use crate::common::error::{ConfigError, Result};
 use crate::config::types::{validate_config, Config};
-use crate::error::{ConfigError, Result};
 use async_trait::async_trait;
 
 use regex::Regex;

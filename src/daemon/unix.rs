@@ -2,8 +2,8 @@
 //!
 //! 提供systemd服务管理和传统Unix守护进程支持
 
+use crate::common::error::{Result, ServiceVitalsError};
 use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus};
-use crate::error::{Result, ServiceVitalsError};
 use async_trait::async_trait;
 use std::fs;
 use std::path::PathBuf;

@@ -689,7 +689,7 @@ pub fn get_default_log_path() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use crate::logging::{LogConfig, LogRotation, LoggingSystem};
+    use super::{LogConfig, LogRotation, LoggingSystem};
     use log::LevelFilter;
     use std::collections::HashMap;
     use std::time::Duration;
