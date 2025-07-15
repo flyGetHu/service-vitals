@@ -127,6 +127,7 @@ impl PlatformDaemonManager {
     }
 }
 
+#[cfg(unix)]
 impl Default for PlatformDaemonManager {
     fn default() -> Self {
         Self::new()

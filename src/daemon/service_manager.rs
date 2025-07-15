@@ -5,9 +5,9 @@
 use crate::common::error::Result;
 #[cfg(unix)]
 use crate::daemon::PlatformDaemonManager;
-use crate::daemon::{DaemonConfig, DaemonManager, DaemonStatus};
+use crate::daemon::{DaemonConfig, DaemonStatus};
+use crate::ServiceVitalsError;
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
 
 /// 服务管理器
 #[cfg(unix)]
@@ -41,42 +41,42 @@ impl ServiceManager {
 
     /// 安装服务（非Unix系统）
     pub async fn install_service(&self, _config: &DaemonConfig) -> Result<()> {
-        Err(crate::error::ServiceVitalsError::DaemonError(
+        Err(ServiceVitalsError::DaemonError(
             "非Unix系统不支持服务安装".to_string(),
         ))
     }
 
     /// 卸载服务（非Unix系统）
     pub async fn uninstall_service(&self, _service_name: &str) -> Result<()> {
-        Err(crate::error::ServiceVitalsError::DaemonError(
+        Err(ServiceVitalsError::DaemonError(
             "非Unix系统不支持服务卸载".to_string(),
         ))
     }
 
     /// 启动服务（非Unix系统）
     pub async fn start_service(&self, _service_name: &str) -> Result<()> {
-        Err(crate::error::ServiceVitalsError::DaemonError(
+        Err(ServiceVitalsError::DaemonError(
             "非Unix系统不支持服务启动".to_string(),
         ))
     }
 
     /// 停止服务（非Unix系统）
     pub async fn stop_service(&self, _service_name: &str) -> Result<()> {
-        Err(crate::error::ServiceVitalsError::DaemonError(
+        Err(ServiceVitalsError::DaemonError(
             "非Unix系统不支持服务停止".to_string(),
         ))
     }
 
     /// 重启服务（非Unix系统）
     pub async fn restart_service(&self, _service_name: &str) -> Result<()> {
-        Err(crate::error::ServiceVitalsError::DaemonError(
+        Err(ServiceVitalsError::DaemonError(
             "非Unix系统不支持服务重启".to_string(),
         ))
     }
 
     /// 获取服务状态（非Unix系统）
     pub async fn get_service_status(&self, _service_name: &str) -> Result<ServiceInfo> {
-        Err(crate::error::ServiceVitalsError::DaemonError(
+        Err(ServiceVitalsError::DaemonError(
             "非Unix系统不支持服务状态查询".to_string(),
         ))
     }
@@ -97,83 +97,65 @@ impl ServiceManager {
 impl ServiceManager {
     /// 安装服务
     pub async fn install_service(&self, config: &DaemonConfig) -> Result<()> {
-        info!("开始安装服务: {}", config.service_name);
-
         // 检查服务是否已经安装
         if self
             .daemon_manager
             .is_installed(&config.service_name)
             .await?
         {
-            info!("服务已经安装: {}", config.service_name);
             return Ok(());
         }
 
         // 执行安装
         self.daemon_manager.install(config).await?;
-        info!("服务安装完成: {}", config.service_name);
 
         Ok(())
     }
 
     /// 卸载服务
     pub async fn uninstall_service(&self, service_name: &str) -> Result<()> {
-        info!("开始卸载服务: {service_name}");
-
         // 检查服务是否已安装
         if !self.daemon_manager.is_installed(service_name).await? {
-            info!("服务未安装: {service_name}");
             return Ok(());
         }
 
         // 执行卸载
         self.daemon_manager.uninstall(service_name).await?;
-        info!("服务卸载完成: {service_name}");
 
         Ok(())
     }
 
     /// 启动服务
     pub async fn start_service(&self, service_name: &str) -> Result<()> {
-        info!("启动服务: {service_name}");
-
         // 检查当前状态
         let current_status = self.daemon_manager.status(service_name).await?;
         if current_status == DaemonStatus::Running {
-            info!("服务已经在运行: {service_name}");
             return Ok(());
         }
 
         // 启动服务
         self.daemon_manager.start(service_name).await?;
-        info!("服务启动完成: {service_name}");
 
         Ok(())
     }
 
     /// 停止服务
     pub async fn stop_service(&self, service_name: &str) -> Result<()> {
-        info!("停止服务: {service_name}");
-
         // 检查当前状态
         let current_status = self.daemon_manager.status(service_name).await?;
         if current_status == DaemonStatus::Stopped {
-            info!("服务已经停止: {service_name}");
             return Ok(());
         }
 
         // 停止服务
         self.daemon_manager.stop(service_name).await?;
-        info!("服务停止完成: {service_name}");
 
         Ok(())
     }
 
     /// 重启服务
     pub async fn restart_service(&self, service_name: &str) -> Result<()> {
-        info!("重启服务: {service_name}");
         self.daemon_manager.restart(service_name).await?;
-        info!("服务重启完成: {service_name}");
         Ok(())
     }
 
@@ -198,7 +180,7 @@ impl ServiceManager {
             match self.get_service_status(service_name).await {
                 Ok(info) => services.push(info),
                 Err(e) => {
-                    error!("获取服务状态失败 {service_name}: {e}");
+                    // error!("获取服务状态失败 {service_name}: {e}"); // Removed unused imports
                     services.push(ServiceInfo {
                         name: service_name.clone(),
                         status: DaemonStatus::Unknown,
@@ -315,7 +297,7 @@ pub struct ServiceInfo {
     pub platform: String,
 }
 
-/// 获取平台名称
+#[allow(dead_code)]
 fn get_platform_name() -> String {
     #[cfg(target_os = "linux")]
     return "Linux".to_string();

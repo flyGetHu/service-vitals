@@ -12,10 +12,10 @@ use signal_hook::consts::{SIGINT, SIGTERM, SIGUSR1};
 use signal_hook_tokio::Signals;
 
 /// 设置信号处理器
-pub async fn setup_signal_handlers(shutdown_tx: broadcast::Sender<()>) -> Result<()> {
+pub async fn setup_signal_handlers(_shutdown_tx: broadcast::Sender<()>) -> Result<()> {
     #[cfg(unix)]
     {
-        setup_unix_signals(shutdown_tx).await
+        setup_unix_signals(_shutdown_tx).await
     }
     #[cfg(not(unix))]
     {
