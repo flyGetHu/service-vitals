@@ -32,7 +32,8 @@ pub struct ServiceNotificationState {
     pub notification_count: u32,
     /// 下次告警的失败次数
     pub next_alert_threshold: u32,
-    /// 下次可告警的最早时间
+    /// 下次可告警的最早时间（仅用于非首次失败通知）
+    /// 首次达到失败阈值时会立即通知，不受此限制
     pub alert_cooldown_until: Option<Instant>,
 }
 
@@ -199,14 +200,23 @@ impl TaskScheduler {
             notification_state.alert_cooldown_until = None;
         }
 
-        // 2. 检查是否需要发送告警通知（基于时间退避）
+        // 2. 检查是否需要发送告警通知
+        // 新逻辑：第一次失败立即发送通知，后续失败受冷却时间限制
+        // 这样可以确保用户第一时间知道服务异常，同时避免通知轰炸
         if !is_healthy {
             notification_state.consecutive_failures += 1;
             if notification_state.consecutive_failures >= service.failure_threshold {
                 let cooldown_secs = service.alert_cooldown_secs.unwrap_or(60); // 默认60秒
-                let can_alert = notification_state
-                    .alert_cooldown_until
-                    .is_none_or(|until| now >= until);
+                
+                // 判断是否为第一次达到失败阈值
+                let is_first_threshold_failure = notification_state.consecutive_failures == service.failure_threshold;
+                
+                // 第一次达到阈值时立即通知，后续失败受冷却时间限制
+                let can_alert = is_first_threshold_failure || 
+                    notification_state
+                        .alert_cooldown_until
+                        .is_none_or(|until| now >= until);
+                
                 if can_alert {
                     if let Some(ref notifier) = notifier {
                         let send_result = notifier.send_health_alert(service, result).await;
@@ -223,9 +233,13 @@ impl TaskScheduler {
                             }
                         }
                     }
-                    // 设置下次可告警的最早时间
-                    notification_state.alert_cooldown_until =
-                        Some(now + Duration::from_secs(cooldown_secs));
+                    
+                    // 只有非首次达到阈值时才设置冷却时间
+                    // 这样第一次失败会立即通知，后续失败受冷却时间限制
+                    if !is_first_threshold_failure {
+                        notification_state.alert_cooldown_until =
+                            Some(now + Duration::from_secs(cooldown_secs));
+                    }
                 }
             }
         }
