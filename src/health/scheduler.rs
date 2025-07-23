@@ -35,6 +35,12 @@ pub struct ServiceNotificationState {
     /// 下次可告警的最早时间（仅用于非首次失败通知）
     /// 首次达到失败阈值时会立即通知，不受此限制
     pub alert_cooldown_until: Option<Instant>,
+    /// 通知发送失败次数
+    pub notification_failures: u32,
+    /// 是否在冷却期间错过了通知
+    pub missed_notifications_during_cooldown: u32,
+    /// 首次失败时间（用于计算持续失败时间）
+    pub first_failure_time: Option<Instant>,
 }
 
 /// 调度器状态
@@ -63,6 +69,10 @@ pub struct NotificationStats {
     pub failed_sent: u32,
     /// 最后通知时间
     pub last_notification_time: Option<Instant>,
+    /// 冷却期间错过的通知数
+    pub missed_during_cooldown: u32,
+    /// 重试发送的通知数
+    pub retried_notifications: u32,
 }
 
 /// 任务调度器trait，定义调度接口
@@ -183,27 +193,46 @@ impl TaskScheduler {
         let need_recover_notify = is_healthy && notification_state.consecutive_failures > 0;
         if need_recover_notify {
             if let Some(ref notifier) = notifier {
-                let send_result = notifier.send_health_alert(service, result).await;
+                // 添加重试机制
+                let mut retry_count = 0;
+                let max_retries = 3;
+                let mut send_result = notifier.send_health_alert(service, result).await;
+                
+                while retry_count < max_retries && send_result.is_err() {
+                    retry_count += 1;
+                    warn!("发送服务恢复通知失败，第{}次重试: {} - {:?}", retry_count, service.name, send_result.as_ref().err());
+                    tokio::time::sleep(Duration::from_secs(2u64.pow(retry_count))).await;
+                    send_result = notifier.send_health_alert(service, result).await;
+                }
+                
                 match send_result {
                     Ok(()) => {
                         info!("发送服务恢复通知成功: {}", service.name);
-                        Self::update_notification_stats_static(status_arc, true).await;
+                        Self::update_notification_stats_static(status_arc, true, retry_count > 0, false).await;
+                        // 重置通知失败计数
+                        notification_state.notification_failures = 0;
                     }
                     Err(e) => {
-                        error!("发送服务恢复通知失败: {} - {}", service.name, e);
-                        Self::update_notification_stats_static(status_arc, false).await;
+                        error!("发送服务恢复通知失败（已重试{}次）: {} - {}", max_retries, service.name, e);
+                        Self::update_notification_stats_static(status_arc, false, retry_count > 0, false).await;
+                        notification_state.notification_failures += 1;
                     }
                 }
             }
             notification_state.consecutive_failures = 0;
-            // 恢复时重置告警冷却时间
+            // 恢复时重置告警冷却时间和错过通知计数
             notification_state.alert_cooldown_until = None;
+            notification_state.missed_notifications_during_cooldown = 0;
+            notification_state.first_failure_time = None;
         }
 
         // 2. 检查是否需要发送告警通知
-        // 新逻辑：第一次失败立即发送通知，后续失败受冷却时间限制
-        // 这样可以确保用户第一时间知道服务异常，同时避免通知轰炸
         if !is_healthy {
+            // 记录首次失败时间
+            if notification_state.first_failure_time.is_none() {
+                notification_state.first_failure_time = Some(now);
+            }
+            
             notification_state.consecutive_failures += 1;
             if notification_state.consecutive_failures >= service.failure_threshold {
                 let cooldown_secs = service.alert_cooldown_secs.unwrap_or(60); // 默认60秒
@@ -211,37 +240,65 @@ impl TaskScheduler {
                 // 判断是否为第一次达到失败阈值
                 let is_first_threshold_failure = notification_state.consecutive_failures == service.failure_threshold;
                 
+                // 检查是否在冷却期间服务已恢复过（即连续失败次数被重置为0后再增加到阈值）
+                // 如果是这种情况，我们应该允许立即通知，因为这是新的故障周期
+                let is_new_failure_cycle = notification_state.consecutive_failures == service.failure_threshold && 
+                    notification_state.first_failure_time.map(|first| now.duration_since(first).as_secs() < cooldown_secs).unwrap_or(false);
+                
                 // 第一次达到阈值时立即通知，后续失败受冷却时间限制
-                let can_alert = is_first_threshold_failure || 
+                // 如果是新的故障周期也应立即通知
+                let can_alert = is_first_threshold_failure || is_new_failure_cycle ||
                     notification_state
                         .alert_cooldown_until
                         .is_none_or(|until| now >= until);
                 
                 if can_alert {
                     if let Some(ref notifier) = notifier {
-                        let send_result = notifier.send_health_alert(service, result).await;
+                        // 添加重试机制
+                        let mut retry_count = 0;
+                        let max_retries = 3;
+                        let mut send_result = notifier.send_health_alert(service, result).await;
+                        
+                        while retry_count < max_retries && send_result.is_err() {
+                            retry_count += 1;
+                            warn!("发送服务告警通知失败，第{}次重试: {} - {:?}", retry_count, service.name, send_result.as_ref().err());
+                            tokio::time::sleep(Duration::from_secs(2u64.pow(retry_count))).await;
+                            send_result = notifier.send_health_alert(service, result).await;
+                        }
+                        
                         match send_result {
                             Ok(()) => {
                                 info!("发送服务告警通知成功: {}", service.name);
                                 notification_state.notification_count += 1;
                                 notification_state.last_notification_time = Some(now);
-                                Self::update_notification_stats_static(status_arc, true).await;
+                                Self::update_notification_stats_static(status_arc, true, retry_count > 0, false).await;
+                                // 重置通知失败计数
+                                notification_state.notification_failures = 0;
+                                
+                                // 只有非首次达到阈值且不是新的故障周期时才设置冷却时间
+                                // 这样第一次失败会立即通知，后续失败受冷却时间限制
+                                if !is_first_threshold_failure && !is_new_failure_cycle {
+                                    notification_state.alert_cooldown_until =
+                                        Some(now + Duration::from_secs(cooldown_secs));
+                                }
                             }
                             Err(e) => {
-                                error!("发送服务告警通知失败: {} - {}", service.name, e);
-                                Self::update_notification_stats_static(status_arc, false).await;
+                                error!("发送服务告警通知失败（已重试{}次）: {} - {}", max_retries, service.name, e);
+                                Self::update_notification_stats_static(status_arc, false, retry_count > 0, false).await;
+                                notification_state.notification_failures += 1;
                             }
                         }
                     }
-                    
-                    // 只有非首次达到阈值时才设置冷却时间
-                    // 这样第一次失败会立即通知，后续失败受冷却时间限制
-                    if !is_first_threshold_failure {
-                        notification_state.alert_cooldown_until =
-                            Some(now + Duration::from_secs(cooldown_secs));
-                    }
+                } else {
+                    // 在冷却期间错过了通知，增加计数
+                    notification_state.missed_notifications_during_cooldown += 1;
+                    // 更新统计信息
+                    Self::update_notification_stats_static(status_arc, false, false, true).await;
                 }
             }
+        } else {
+            // 服务健康时重置首次失败时间，表示当前故障周期结束
+            notification_state.first_failure_time = None;
         }
 
         // 3. 更新最后健康状态
@@ -254,6 +311,8 @@ impl TaskScheduler {
     async fn update_notification_stats_static(
         status_arc: &Arc<RwLock<SchedulerStatus>>,
         success: bool,
+        retried: bool = false,
+        missed: bool = false,
     ) {
         let mut status = status_arc.write().await;
         status.notification_stats.total_sent += 1;
@@ -261,6 +320,12 @@ impl TaskScheduler {
             status.notification_stats.successful_sent += 1;
         } else {
             status.notification_stats.failed_sent += 1;
+        }
+        if retried {
+            status.notification_stats.retried_notifications += 1;
+        }
+        if missed {
+            status.notification_stats.missed_during_cooldown += 1;
         }
         status.notification_stats.last_notification_time = Some(Instant::now());
     }
@@ -335,6 +400,8 @@ impl TaskScheduler {
                         }
                     }
                 }
+
+                // 调用健康检测结果回调
 
                 // 调用健康检测结果回调
                 {
@@ -429,6 +496,50 @@ impl TaskScheduler {
                 info!("配置更新监听器已停止");
             });
         }
+        
+        // 启动定期检查错过通知的任务
+        let notification_states = Arc::clone(&self.notification_states);
+        let notifier = self.notifier.clone();
+        let status = Arc::clone(&self.status);
+        let config = Arc::clone(&self.config);
+        
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(60)); // 每分钟检查一次
+            loop {
+                interval.tick().await;
+                
+                // 检查是否有错过通知需要发送
+                let states_clone = notification_states.read().await;
+                let now = Instant::now();
+                
+                // 收集需要处理的服务
+                let services_to_check: Vec<_> = states_clone.iter()
+                    .filter(|(_, state)| {
+                        state.missed_notifications_during_cooldown > 0 &&
+                        state.alert_cooldown_until.map(|until| now >= until).unwrap_or(true)
+                    })
+                    .map(|(name, _)| name.clone())
+                    .collect();
+                
+                drop(states_clone);
+                
+                // 处理这些服务
+                if !services_to_check.is_empty() {
+                    for service_name in services_to_check {
+                        // 这里可以发送一个汇总通知，说明在冷却期间错过的通知数量
+                        // 由于我们没有原始的HealthResult，所以这里只是示例
+                        info!("服务 {} 在冷却期间错过了 {} 次通知，冷却期已结束", 
+                              service_name, 
+                              {
+                                  let states = notification_states.read().await;
+                                  states.get(&service_name)
+                                      .map(|s| s.missed_notifications_during_cooldown)
+                                      .unwrap_or(0)
+                              });
+                    }
+                }
+            }
+        });
     }
 
     /// 处理配置更新
@@ -595,6 +706,8 @@ impl TaskScheduler {
                         }
                     }
                 }
+            }
+        })
 
                 // 记录检测结果
                 if result.status.is_healthy() {
