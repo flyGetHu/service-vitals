@@ -208,10 +208,11 @@ fn format_time_helper(
     _: &mut handlebars::RenderContext,
     out: &mut dyn handlebars::Output,
 ) -> handlebars::HelperResult {
-    let timestamp = h
-        .param(0)
-        .and_then(|v| v.value().as_str())
-        .ok_or_else(|| handlebars::RenderError::new("时间戳参数无效"))?;
+    let timestamp = h.param(0).and_then(|v| v.value().as_str()).ok_or_else(|| {
+        handlebars::RenderError::from(handlebars::RenderErrorReason::Other(
+            "时间戳参数无效".to_string(),
+        ))
+    })?;
 
     // 这里可以添加更复杂的时间格式化逻辑
     out.write(timestamp)?;
