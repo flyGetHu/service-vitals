@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/flyGetHu/service-vitals)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/flyGetHu/service-vitals)
 
 一个跨平台的服务健康监控工具，支持HTTP/HTTPS服务检测和实时告警通知。
 
@@ -13,8 +13,9 @@ Service Vitals 是一个使用Rust开发的现代化服务健康监控解决方�
 - **实时健康检测** - 支持HTTP/HTTPS服务的定期健康检查
 - **智能告警系统** - 集成飞书webhook，支持自定义消息模板
 - **配置热重载** - 无需重启即可更新监控配置
-- **跨平台支持** - 原生支持Linux和macOS
+- **跨平台支持** - 原生支持Linux、macOS和Windows
 - **守护进程模式** - 支持系统服务安装和后台运行
+- **Web监控界面** - 实时状态监控面板和RESTful API
 
 ## ✨ 功能特性
 
@@ -38,7 +39,7 @@ Service Vitals 是一个使用Rust开发的现代化服务健康监控解决方�
 - 多格式状态输出（JSON/YAML/表格）
 
 ### 🖥️ 守护进程支持
-- Linux/macOS systemd集成
+- Linux/macOS/Windows系统服务集成
 - 进程生命周期管理
 - 优雅关闭和信号处理
 
@@ -47,13 +48,7 @@ Service Vitals 是一个使用Rust开发的现代化服务健康监控解决方�
 - 实时状态更新
 - 服务详情展示
 - RESTful API接口
-- 可选的API密钥认证
-
-### 📈 Prometheus指标导出
-- 完整的监控指标收集
-- 标准Prometheus格式
-- 自定义指标标签
-- 性能和可用性指标
+- 可配置的显示选项
 
 ### 🔔 告警通知系统
 - 飞书webhook集成
@@ -64,7 +59,7 @@ Service Vitals 是一个使用Rust开发的现代化服务健康监控解决方�
 ## 📦 安装指南
 
 ### 系统要求
-- **操作系统**: Linux (Ubuntu 18.04+, CentOS 7+), macOS 10.15+
+- **操作系统**: Linux (Ubuntu 18.04+, CentOS 7+), macOS 10.15+, Windows 10+
 - **内存**: 最少64MB RAM
 - **磁盘空间**: 最少50MB可用空间
 - **网络**: 需要访问被监控服务的网络连接
@@ -84,6 +79,15 @@ chmod +x service-vitals
 
 # 移动到系统路径
 sudo mv service-vitals /usr/local/bin/
+```
+
+#### Windows (PowerShell)
+```powershell
+# 下载最新版本 (Windows)
+Invoke-WebRequest -Uri "https://github.com/flyGetHu/service-vitals/releases/latest/download/service-vitals-windows.exe" -OutFile "service-vitals.exe"
+
+# 移动到系统路径
+Move-Item -Path ".\service-vitals.exe" -Destination "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps"
 ```
 
 ### 从源码编译
@@ -166,6 +170,15 @@ retry_attempts = 3
 # 重试间隔，单位秒（默认5）
 retry_delay_seconds = 5
 
+# Web界面配置
+[global.web]
+enabled = true
+port = 8080
+bind_address = "0.0.0.0"
+show_problems_only = false
+layout_type = "cards"
+refresh_interval_seconds = 3
+
 # 全局请求头（可选）
 [global.headers]
 "User-Agent" = "ServiceVitals/1.0"
@@ -207,7 +220,6 @@ description = "数据库连接检测"
 
 ```toml
 [global]
-# 最小配置只需要指定必要的全局设置
 
 [[services]]
 name = "示例服务"
@@ -228,6 +240,17 @@ expected_status_codes = [200]
 | `log_level`               | String | "info" | 日志级别                                             |
 | `failure_threshold`       | u32    | 1      | 失败阈值                                             |
 | `enabled`                 | bool   | true   | 是否启用服务                                         |
+
+### Web界面配置参数
+
+| 参数                      | 类型   | 默认值 | 说明                                                 |
+| ------------------------- | ------ | ------ | ---------------------------------------------------- |
+| `enabled`                 | bool   | false  | 是否启用Web界面                                      |
+| `port`                    | u16    | 8080   | Web服务监听端口                                      |
+| `bind_address`            | String | "0.0.0.0" | Web服务绑定地址                                    |
+| `show_problems_only`      | bool   | false  | 是否只显示有问题的服务                               |
+| `layout_type`             | String | "cards" | 界面布局类型（cards/table）                        |
+| `refresh_interval_seconds`| u64    | 3      | 状态刷新间隔（秒）                                   |
 
 ## 🎯 使用教程
 
@@ -290,6 +313,18 @@ service-vitals stop --force
 service-vitals stop --timeout 60
 ```
 
+#### 重启服务
+```bash
+# 前台重启
+service-vitals restart --foreground
+
+# 后台重启
+service-vitals restart
+
+# 指定超时时间
+service-vitals restart --timeout 60
+```
+
 #### 查看状态
 ```bash
 # 查看基本状态
@@ -332,16 +367,13 @@ service-vitals uninstall --service-name "service-vitals"
 service-vitals test-notification feishu "这是一条测试消息"
 ```
 
-#### 查看日志
+#### 查看版本信息
 ```bash
-# 实时查看日志
-service-vitals logs --follow
+# 文本格式
+service-vitals version
 
-# 查看特定级别日志
-service-vitals logs --level error
-
-# 查看最近的日志
-service-vitals logs --tail 100
+# JSON格式
+service-vitals version --format json
 ```
 
 ### 环境变量支持
@@ -365,10 +397,6 @@ export SERVICE_VITALS_MAX_CONCURRENT="100"
 export SERVICE_VITALS_WORKDIR="/var/lib/service-vitals"
 ```
 
-
-
-
-
 ## 🛠️ 开发指南
 
 ### 项目结构
@@ -380,12 +408,13 @@ service-vitals/
 │   ├── lib.rs                  # 库入口，导出公共接口
 │   ├── cli/                    # CLI命令模块
 │   │   ├── mod.rs
-│   │   ├── commands.rs         # 命令定义和处理
-│   │   └── args.rs             # 命令行参数解析
+│   │   ├── args.rs             # 命令行参数解析
+│   │   └── commands.rs         # 命令定义和处理
 │   ├── config/                 # 配置管理模块
 │   │   ├── mod.rs
 │   │   ├── types.rs            # 配置数据结构
 │   │   ├── loader.rs           # 配置文件加载
+│   │   ├── manager.rs          # 配置管理器
 │   │   └── watcher.rs          # 配置文件热重载
 │   ├── health/                 # 健康检测模块
 │   │   ├── mod.rs
@@ -395,23 +424,31 @@ service-vitals/
 │   ├── notification/           # 通知系统模块
 │   │   ├── mod.rs
 │   │   ├── feishu.rs           # 飞书webhook通知
+│   │   ├── sender.rs           # 通知发送器
 │   │   └── template.rs         # 消息模板引擎
 │   ├── web/                    # Web界面模块
 │   │   ├── mod.rs
-│   │   ├── server.rs           # Web服务器
-│   │   ├── api.rs              # API端点
-│   │   ├── dashboard.rs        # 仪表板
-│   │   ├── metrics.rs          # Prometheus指标
-│   │   └── auth.rs             # 认证中间件
+│   │   └── handlers.rs         # Web处理器
 │   ├── daemon/                 # 守护进程模块
 │   │   ├── mod.rs
+│   │   ├── service_manager.rs  # 服务管理器
+│   │   ├── signal_handler.rs   # 信号处理器
 │   │   └── unix.rs             # Unix系统守护进程
-│   ├── status.rs               # 状态管理
-│   ├── error.rs                # 错误处理
-│   └── logging.rs              # 日志系统
+│   ├── core/                   # 核心应用模块
+│   │   ├── mod.rs
+│   │   ├── app.rs              # 应用程序入口
+│   │   ├── service.rs          # 服务管理
+│   │   ├── daemon_service.rs   # 守护进程服务
+│   │   └── foreground_service.rs # 前台服务
+│   ├── common/                 # 通用功能模块
+│   │   ├── mod.rs
+│   │   ├── error.rs            # 错误处理
+│   │   ├── logging.rs          # 日志系统
+│   │   └── status.rs           # 状态管理
 ├── examples/                   # 配置示例
 ├── docs/                       # 文档
 ├── tests/                      # 测试文件
+├── benches/                    # 基准测试
 ├── Cargo.toml                  # 项目配置
 └── README.md                   # 项目说明
 ```
@@ -424,7 +461,7 @@ Service Vitals采用模块化架构设计，主要组件包括：
 2. **健康检测** - 异步HTTP检测和结果处理
 3. **任务调度** - 基于tokio的并发任务调度
 4. **通知系统** - 可扩展的通知渠道支持
-5. **Web服务** - 基于warp的HTTP服务器
+5. **Web服务** - 基于axum的HTTP服务器
 6. **状态管理** - 内存和持久化状态存储
 7. **守护进程** - 跨平台系统服务支持
 
@@ -511,6 +548,9 @@ cargo test health_checker
 # 运行集成测试
 cargo test --test integration
 
+# 运行基准测试
+cargo bench
+
 # 生成测试覆盖率报告
 cargo tarpaulin --out Html
 ```
@@ -570,6 +610,10 @@ A: Service Vitals支持监控任何可访问的HTTP/HTTPS服务，包括内网�
 
 A: 是的，配置文件中可以使用 `${VARIABLE_NAME}` 语法引用环境变量。
 
+#### Q: 如何访问Web监控界面？
+
+A: 启用Web界面后，通过浏览器访问 `http://localhost:8080/dashboard` 查看监控面板。
+
 ### 路线图
 
 - [ ] 支持更多通知渠道（邮件、Slack、钉钉）
@@ -578,6 +622,7 @@ A: 是的，配置文件中可以使用 `${VARIABLE_NAME}` 语法引用环境变
 - [ ] 支持自定义检测脚本
 - [ ] 添加移动端应用
 - [ ] 集成更多监控系统
+- [ ] 增强Web界面功能（历史数据、图表等）
 
 ---
 
